@@ -17,6 +17,7 @@ import { requireSessionUser } from "@/lib/server/session";
 import type { ServiceCategory } from "@/lib/types/index";
 import { normalizeProviderDisplayName } from "@/lib/server/provider-display";
 import CustomerPageNav from "@/components/customer/shared/CustomerPageNav";
+import RazorpayPayment from "@/components/customer/booking/RazorpayPayment";
 
 interface BookServicePageProps {
   params: Promise<{ id: string }>;
@@ -72,9 +73,18 @@ export default async function BookServicePage({ params }: BookServicePageProps) 
 
   const address = String(booking.address ?? "Home Service");
   const serviceCharge = Math.max(0, Number(booking.amount ?? 0));
-  const platformFee = Math.round(serviceCharge * 0.08);
-  const gst = Math.round((serviceCharge + platformFee) * 0.18);
-  const total = serviceCharge + platformFee + gst;
+
+  // Get booking fee from services collection
+  let bookingFee = 25; // Default ₹25
+  try {
+    const serviceSnap = await adminDb.collection("services").doc(String(booking.serviceCategory ?? "electrician")).get();
+    if (serviceSnap.exists) {
+      const serviceData = serviceSnap.data() ?? {};
+      bookingFee = Number(serviceData.bookingFee ?? 25);
+    }
+  } catch (error) {
+    console.log("Could not fetch booking fee, using default:", error);
+  }
 
   return (
     <main className="min-h-screen bg-muted/40">
@@ -158,29 +168,40 @@ export default async function BookServicePage({ params }: BookServicePageProps) 
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-2xl font-semibold text-foreground">Payment Summary</h2>
-          <div className="mt-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Service charge</span>
-              <span className="font-medium">Rs {serviceCharge}</span>
+          <h2 className="text-2xl font-semibold text-foreground">Payment Required</h2>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                  <Wallet className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-emerald-800">Booking Fee</p>
+                  <p className="text-sm text-emerald-700">Required to confirm your appointment</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-2xl font-bold text-emerald-800">₹{bookingFee}</p>
+                <p className="text-sm text-emerald-600 mt-1">
+                  Full service payment will be made directly to the provider after completion
+                </p>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Platform fee</span>
-              <span className="font-medium">Rs {platformFee}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">GST (18%)</span>
-              <span className="font-medium">Rs {gst}</span>
-            </div>
-          </div>
-          <div className="mt-4 border-t border-border pt-4">
-            <div className="flex items-center justify-between">
-              <p className="text-base font-semibold text-foreground">Total Amount</p>
-              <p className="text-2xl font-bold text-foreground">Rs {total}</p>
-            </div>
-            <p className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <Wallet size={14} className="text-emerald-600" />
-              Payment Method: Pay After Service
+
+            <RazorpayPayment
+              bookingId={id}
+              amount={bookingFee}
+              onSuccess={() => {
+                // Refresh the page to show updated status
+                window.location.reload();
+              }}
+              onError={(error) => {
+                alert(`Payment failed: ${error}`);
+              }}
+            />
+
+            <p className="text-xs text-muted-foreground text-center">
+              Secure payment powered by Razorpay
             </p>
           </div>
         </section>

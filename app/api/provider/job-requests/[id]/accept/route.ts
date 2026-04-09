@@ -92,8 +92,26 @@ export async function POST(
 
         const jobRef = adminDb.collection("workerJobs").doc();
         const base = Number(resolvedReqData.estimatedPrice ?? booking.amount ?? 0);
-        const commission = Math.round(base * 0.1);
+        const commission = Math.round(base * 0.15); // Changed from 0.1 to 0.15 (15%)
         const net = base - commission;
+
+        // Check worker's wallet balance
+        const workerRef = adminDb.collection("users").doc(workerId);
+        const workerSnap = await tx.get(workerRef);
+        if (!workerSnap.exists) {
+          throw new Error("Worker profile not found.");
+        }
+        const workerData = workerSnap.data() ?? {};
+        const currentBalance = Number(workerData.walletBalance ?? 0);
+        if (currentBalance < commission) {
+          throw new Error(`Insufficient wallet balance. Required: ₹${commission}, Available: ₹${currentBalance}`);
+        }
+
+        // Deduct commission from wallet
+        tx.update(workerRef, {
+          walletBalance: currentBalance - commission,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
 
         tx.update(resolvedReqRef, {
           status: "accepted",
@@ -149,9 +167,27 @@ export async function POST(
 
       const jobRef = adminDb.collection("workerJobs").doc();
       const base = Number(booking.amount ?? 0);
-      const commission = Math.round(base * 0.1);
+      const commission = Math.round(base * 0.15); // Changed from 0.1 to 0.15 (15%)
       const net = base - commission;
       const scheduledAtRaw = new Date(String(booking.scheduledAt ?? ""));
+
+      // Check worker's wallet balance
+      const workerRef = adminDb.collection("users").doc(workerId);
+      const workerSnap = await tx.get(workerRef);
+      if (!workerSnap.exists) {
+        throw new Error("Worker profile not found.");
+      }
+      const workerData = workerSnap.data() ?? {};
+      const currentBalance = Number(workerData.walletBalance ?? 0);
+      if (currentBalance < commission) {
+        throw new Error(`Insufficient wallet balance. Required: ₹${commission}, Available: ₹${currentBalance}`);
+      }
+
+      // Deduct commission from wallet
+      tx.update(workerRef, {
+        walletBalance: currentBalance - commission,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
 
       tx.set(jobRef, {
         bookingId: bookingRef.id,
