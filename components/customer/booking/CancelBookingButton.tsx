@@ -37,6 +37,7 @@ export default function CancelBookingButton({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
   const [confirming, setConfirming] = useState(false);
   const hasCancellationFee = isWithinCancellationFeeWindow(scheduledAt);
 
@@ -53,6 +54,9 @@ export default function CancelBookingButton({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String(data?.error ?? "Unable to cancel booking"));
+      if (typeof data?.message === "string" && data.message) {
+        setInfoMessage(data.message);
+      }
       router.push(successRedirect);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unable to cancel booking");
@@ -75,7 +79,10 @@ export default function CancelBookingButton({
         </Button>
       ) : (
         <div className="rounded-lg border border-red-200 bg-red-50 p-2">
-          <p className="text-xs font-medium text-red-800">Cancel this service booking?</p>
+          <p className="text-xs font-medium text-red-800">Are you sure?</p>
+          <p className="mt-1 text-[11px] text-red-700">
+            Cancellations after acceptance may not be eligible for a booking fee refund.
+          </p>
           {hasCancellationFee ? (
             <p className="mt-1 text-[11px] text-red-700">
               Cancelling within 1 hour can apply a 50% charge.
@@ -105,6 +112,11 @@ export default function CancelBookingButton({
           </div>
         </div>
       )}
+      {infoMessage ? (
+        <p className="mt-1 rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+          {infoMessage}
+        </p>
+      ) : null}
       {error ? <p className="mt-1 rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">{error}</p> : null}
     </div>
   );

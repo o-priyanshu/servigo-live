@@ -158,6 +158,7 @@ export default function ProviderTopbar() {
             readOnly
             value={`Provider operations in ${worker?.address?.pincode ?? "your service area"}`}
             className="h-10 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+            suppressHydrationWarning
           />
         </div>
 
@@ -171,6 +172,7 @@ export default function ProviderTopbar() {
             }}
             className="inline-flex h-10 items-center gap-1 rounded-lg border border-border bg-card px-3 text-sm hover:bg-muted"
             aria-label="Set work area"
+            suppressHydrationWarning
           >
             <MapPin size={14} className="text-muted-foreground" />
             {worker?.address?.pincode ?? "N/A"}
@@ -181,6 +183,7 @@ export default function ProviderTopbar() {
             disabled={isLoggingOut}
             className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Logout"
+            suppressHydrationWarning
           >
             <LogOut size={16} />
             {isLoggingOut ? "Logging out..." : "Logout"}

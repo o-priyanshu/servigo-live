@@ -67,32 +67,47 @@ export async function GET() {
         .get(),
     ]);
 
-    const rows = jobRequestsSnap.docs.map((entry) => {
-      const data = entry.data() ?? {};
-      return {
-        id: entry.id,
-        workerId: String(data.workerId ?? ""),
-        bookingId: String(data.bookingId ?? ""),
-        customerId: String(data.customerId ?? ""),
-        customerName: String(data.customerName ?? "Customer"),
-        customerPhone: String(data.customerPhone ?? ""),
-        customerAddress: data.customerAddress ?? {},
-        customerRating: Number(data.customerRating ?? 0),
-        service: String(data.service ?? ""),
-        description: String(data.description ?? ""),
-        photos: Array.isArray(data.photos) ? data.photos.map(String) : [],
-        scheduledTime: toIso(data.scheduledTime),
-        estimatedPrice: Number(data.estimatedPrice ?? 0),
-        distance: Number(data.distance ?? 0),
-        status: "pending",
-        expiresAt: normalizedExpiresAt(data.createdAt, data.expiresAt),
-        createdAt: toIso(data.createdAt),
-      };
+    const bookingIdsToFetch = jobRequestsSnap.docs
+      .map((entry) => String((entry.data() ?? {}).bookingId ?? ""))
+      .filter(Boolean);
+    const bookingRefs = bookingIdsToFetch.map((bookingId) => adminDb.collection("bookings").doc(bookingId));
+    const bookingSnaps = bookingRefs.length > 0 ? await adminDb.getAll(...bookingRefs) : [];
+    const paidBookingIds = new Set<string>();
+    bookingSnaps.forEach((snap) => {
+      if (snap.exists && String(snap.data()?.paymentStatus ?? "") === "paid") {
+        paidBookingIds.add(snap.id);
+      }
     });
+
+    const rows = jobRequestsSnap.docs
+      .filter((entry) => paidBookingIds.has(String((entry.data() ?? {}).bookingId ?? "")))
+      .map((entry) => {
+        const data = entry.data() ?? {};
+        return {
+          id: entry.id,
+          workerId: String(data.workerId ?? ""),
+          bookingId: String(data.bookingId ?? ""),
+          customerId: String(data.customerId ?? ""),
+          customerName: String(data.customerName ?? "Customer"),
+          customerPhone: String(data.customerPhone ?? ""),
+          customerAddress: data.customerAddress ?? {},
+          customerRating: Number(data.customerRating ?? 0),
+          service: String(data.service ?? ""),
+          description: String(data.description ?? ""),
+          photos: Array.isArray(data.photos) ? data.photos.map(String) : [],
+          scheduledTime: toIso(data.scheduledTime),
+          estimatedPrice: Number(data.estimatedPrice ?? 0),
+          distance: Number(data.distance ?? 0),
+          status: "pending",
+          expiresAt: normalizedExpiresAt(data.createdAt, data.expiresAt),
+          createdAt: toIso(data.createdAt),
+        };
+      });
 
     const bookingIds = new Set(rows.map((item) => item.bookingId));
     const fallbackRows = bookingsSnap.docs
       .filter((entry) => !bookingIds.has(entry.id))
+      .filter((entry) => String((entry.data() ?? {}).paymentStatus ?? "") === "paid")
       .map((entry) => {
         const data = entry.data() ?? {};
         const address = String(data.address ?? "");

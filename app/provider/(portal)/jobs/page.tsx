@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import toast from "react-hot-toast";
 import ProviderJobCard from "@/components/provider/ProviderJobCard";
 import ProviderSectionHeader from "@/components/provider/ProviderSectionHeader";
 import { ProviderEmptyState } from "@/components/provider/ProviderStates";
@@ -172,30 +173,59 @@ export default function ProviderJobsPage() {
       : cancelled;
 
   async function handleAcceptJob(id: string) {
-    await acceptJob(id);
-    await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    try {
+      await acceptJob(id);
+      toast.success("✓ Job Accepted! Moving to Active Jobs.");
+      await new Promise(r => setTimeout(r, 500));
+      await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Failed to accept job";
+      toast.error(`Unable to accept: ${errorMsg}`);
+      await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    }
   }
 
   async function handleDeclineJob(id: string) {
-    await declineJob(id);
-    await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    try {
+      await declineJob(id);
+      toast.success("✓ Job Declined");
+      await new Promise(r => setTimeout(r, 500));
+      await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Failed to decline job";
+      toast.error(`Unable to decline: ${errorMsg}`);
+      await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    }
   }
 
   async function handleAdvanceJob(id: string) {
-    const source = activeJobs.find((entry) => entry.id === id);
-    const nextStatus =
-      source?.status === "accepted"
-        ? "on_way"
-        : source?.status === "on_way"
-        ? "arrived"
-        : source?.status === "arrived"
-        ? "working"
-        : source?.status ?? "working";
-    await updateJobStatus(id, nextStatus, {
-      bookingId: source?.bookingId,
-      workerId: source?.workerId,
-    });
-    await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    try {
+      const source = activeJobs.find((entry) => entry.id === id);
+      const nextStatus =
+        source?.status === "accepted"
+          ? "on_way"
+          : source?.status === "on_way"
+          ? "arrived"
+          : source?.status === "arrived"
+          ? "working"
+          : source?.status ?? "working";
+      
+      const statusLabels: Record<string, string> = {
+        on_way: "On the Way",
+        arrived: "Arrived",
+        working: "Started Work",
+      };
+      
+      await updateJobStatus(id, nextStatus, {
+        bookingId: source?.bookingId,
+        workerId: source?.workerId,
+      });
+      toast.success(`✓ ${statusLabels[nextStatus] || "Status Updated"}`);
+      await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Failed to update job";
+      toast.error(`Failed: ${errorMsg}`);
+    }
   }
 
   async function handleCompleteJob(id: string) {

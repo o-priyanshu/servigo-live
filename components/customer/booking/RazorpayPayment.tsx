@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface RazorpayPaymentProps {
   bookingId: string;
@@ -48,9 +50,20 @@ export default function RazorpayPayment({ bookingId, amount, onSuccess, onError 
         order_id: orderId,
         name: "ServiGo",
         description: "Booking Fee Payment",
-        handler: function (response: any) {
+        handler: async function (response: any) {
           // Payment successful
-          onSuccess();
+          try {
+            await updateDoc(doc(db, "bookings", bookingId), {
+              paymentStatus: "paid",
+              paymentId: response.razorpay_payment_id,
+              updatedAt: new Date(),
+            });
+            console.log('Payment status updated in Firestore');
+            onSuccess();
+          } catch (error) {
+            console.error('Failed to update payment status:', error);
+            onError('Payment verification failed');
+          }
         },
         prefill: {
           name: "", // Will be filled from user profile if available

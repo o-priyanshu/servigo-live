@@ -27,11 +27,6 @@ export default function DashboardActionPopup({ isOpen, popupType, popupBookingId
             ? "Your service appointment has been successfully scheduled."
             : "Your booking was cancelled successfully."}
         </p>
-        {popupType === "booked" && (
-          <p className="mx-auto mt-4 w-fit rounded-lg bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white">
-            Booking Reference: SG-{(popupBookingId || "0000").slice(0, 8).toUpperCase()}
-          </p>
-        )}
         <div className="mt-5 flex justify-center gap-2">
           <Button className="h-10 rounded-lg px-4" onClick={onClose}>
             Continue

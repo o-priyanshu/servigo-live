@@ -113,47 +113,113 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       msUntilScheduled >= 0 &&
       msUntilScheduled <= CANCELLATION_WINDOW_MS;
     const cancellationCharge = withinOneHour ? Number((Math.max(0, amount) * 0.5).toFixed(2)) : 0;
+    const isAccepted = currentStatus === "confirmed";
+    const isPaid = String(booking.paymentStatus ?? String((booking.payment ?? {}).status ?? "")) === "paid";
+    let refundMessage = "";
 
-    await bookingRef.set(
-      {
+    await adminDb.runTransaction(async (tx) => {
+      const freshBookingSnap = await tx.get(bookingRef);
+      if (!freshBookingSnap.exists) {
+        throw new Error("Booking not found");
+      }
+
+      const updatePayload: Record<string, unknown> = {
         status: "cancelled",
         cancelledBy: "customer",
         cancellationCharge,
         cancelledAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-        payment: {
+      };
+
+      if (!isAccepted && isPaid) {
+        updatePayload.payment = {
           status: cancellationCharge > 0 ? "held" : "refunded",
           holdAmount: cancellationCharge > 0 ? cancellationCharge : Math.max(0, amount),
           refundedAt: cancellationCharge > 0 ? null : FieldValue.serverTimestamp(),
-        },
-      },
-      { merge: true }
-    );
+        };
+        updatePayload.paymentStatus = cancellationCharge > 0 ? "held" : "refunded";
+        refundMessage = "Refund Initiated";
+      }
 
-    const jobRequestsSnap = await adminDb
-      .collection("jobRequests")
-      .where("bookingId", "==", id)
-      .limit(20)
-      .get();
+      if (isAccepted) {
+        updatePayload.payment = {
+          status: String((booking.payment ?? {}).status ?? "paid"),
+          holdAmount: Number((booking.payment ?? {}).holdAmount ?? 0),
+          refundedAt: null,
+        };
+        updatePayload.paymentStatus = String(booking.paymentStatus ?? "paid");
 
-    await Promise.all(
-      jobRequestsSnap.docs.map(async (docSnap) => {
-        const row = docSnap.data() ?? {};
-        const status = String(row.status ?? "");
-        if (status === "declined" || status === "expired" || status === "cancelled") return;
-        await docSnap.ref.set(
-          {
+        const workerJobsSnap = await adminDb
+          .collection("workerJobs")
+          .where("bookingId", "==", id)
+          .limit(1)
+          .get();
+
+        if (!workerJobsSnap.empty) {
+          const jobSnap = workerJobsSnap.docs[0];
+          const jobData = jobSnap.data() ?? {};
+          const commission = Number(jobData.price?.commission ?? 0);
+          const workerId = String(booking.providerId ?? "");
+
+          if (workerId && commission > 0) {
+            const workerRef = adminDb.collection("users").doc(workerId);
+            const workerSnap = await tx.get(workerRef);
+            if (workerSnap.exists) {
+              const currentBalance = Number(workerSnap.data()?.walletBalance ?? 0);
+              tx.update(workerRef, {
+                walletBalance: currentBalance + commission,
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+
+          tx.update(jobSnap.ref, {
             status: "cancelled",
+            paymentStatus: "released",
             cancelledBy: "customer",
             cancelledAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-      })
-    );
+          });
+        }
+      }
 
-    return NextResponse.json({ ok: true, id, status: "cancelled", cancellationCharge });
+      tx.update(bookingRef, updatePayload);
+
+      const jobRequestsSnap = await adminDb
+        .collection("jobRequests")
+        .where("bookingId", "==", id)
+        .limit(20)
+        .get();
+
+      await Promise.all(
+        jobRequestsSnap.docs.map(async (docSnap) => {
+          const row = docSnap.data() ?? {};
+          const status = String(row.status ?? "");
+          if (status === "declined" || status === "expired" || status === "cancelled") return;
+          await docSnap.ref.set(
+            {
+              status: "cancelled",
+              cancelledBy: "customer",
+              cancelledAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        })
+      );
+    });
+
+    const responseBody: Record<string, unknown> = {
+      ok: true,
+      id,
+      status: "cancelled",
+      cancellationCharge,
+    };
+    if (refundMessage) {
+      responseBody.message = refundMessage;
+    }
+
+    return NextResponse.json(responseBody);
   } catch (error: unknown) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

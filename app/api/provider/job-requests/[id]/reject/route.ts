@@ -25,19 +25,6 @@ export async function POST(
       if (directReqSnap.exists) {
         resolvedReqRef = directReqRef;
         resolvedReqData = directReqSnap.data() ?? {};
-      } else {
-        const linkedReqSnap = await tx.get(
-          adminDb
-            .collection("jobRequests")
-            .where("bookingId", "==", jobId)
-            .where("workerId", "==", workerId)
-            .where("status", "==", "pending")
-            .limit(1)
-        );
-        if (!linkedReqSnap.empty) {
-          resolvedReqRef = linkedReqSnap.docs[0].ref;
-          resolvedReqData = linkedReqSnap.docs[0].data() ?? {};
-        }
       }
 
       if (resolvedReqRef && resolvedReqData) {

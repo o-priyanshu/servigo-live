@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   limit as firestoreLimit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -201,23 +202,75 @@ export const subscribeToPendingJobs = (
   radius: number,
   callback: (jobs: JobRequest[]) => void
 ): (() => void) => {
-  let cancelled = false;
-  const run = async () => {
-    try {
-      const rows = await getPendingJobs(workerId, lat, lng, radius);
-      if (!cancelled) callback(rows);
-    } catch {
-      if (!cancelled) callback([]);
+  const q = query(
+    collection(db, "bookings"),
+    where("providerId", "==", workerId),
+    where("status", "==", "pending"),
+    where("paymentStatus", "==", "paid")
+  );
+
+  return onSnapshot(q, async (snapshot) => {
+    const jobs: JobRequest[] = [];
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      const customerId = String(data.customerId ?? "");
+      let customerName = "Customer";
+      let customerPhone = "";
+
+      if (customerId) {
+        try {
+          const customerDoc = await getDoc(doc(db, "users", customerId));
+          const customerData = customerDoc.data() ?? {};
+          customerName = String(customerData.name ?? "Customer");
+          customerPhone = String(customerData.phone ?? "");
+        } catch (error) {
+          console.error("Failed to fetch customer data:", error);
+        }
+      }
+
+      const job: JobRequest = {
+        id: docSnap.id,
+        workerId: workerId,
+        bookingId: docSnap.id,
+        customerId: customerId,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        customerAddress: {
+          lat: Number(data.lat ?? 0),
+          lng: Number(data.lng ?? 0),
+          fullAddress: String(data.address ?? ""),
+          pincode: "", // Not available in booking
+        },
+        customerRating: 0, // Not available in booking
+        service: String(data.serviceCategory ?? ""),
+        description: `Booking for ${data.serviceCategory ?? "service"}`,
+        photos: [],
+        scheduledTime: data.scheduledAt,
+        estimatedPrice: Number(data.amount ?? 0),
+        distance: 0, // Calculate if needed
+        status: "pending",
+        expiresAt: data.expiresAt,
+        createdAt: data.createdAt,
+      };
+      jobs.push(job);
     }
-  };
-  void run();
-  const timer = window.setInterval(() => {
-    void run();
-  }, 8000);
-  return () => {
-    cancelled = true;
-    window.clearInterval(timer);
-  };
+
+    // Sort by createdAt descending
+    jobs.sort((a, b) => (toEpochMillis(b.createdAt) || 0) - (toEpochMillis(a.createdAt) || 0));
+
+    // Filter by location
+    let filteredJobs = jobs;
+    if (typeof lat === "number" && typeof lng === "number" && typeof radius === "number") {
+      filteredJobs = jobs.filter((job) => {
+        const addr = job.customerAddress;
+        if (!addr || typeof addr.lat !== "number" || typeof addr.lng !== "number") return true;
+        return haversineKm(lat, lng, addr.lat, addr.lng) <= radius;
+      });
+    }
+
+    callback(filteredJobs);
+  });
 };
 
 export const getPendingJobs = async (
@@ -256,9 +309,20 @@ export const getPendingJobs = async (
       firestoreLimit(50)
     )
   );
-  const rows = requestsSnap.docs
-    .map(toJobRequest)
-    .sort((a, b) => (toEpochMillis(b.createdAt) || 0) - (toEpochMillis(a.createdAt) || 0));
+  let rows = requestsSnap.docs.map(toJobRequest);
+  const uniqueBookingIds = Array.from(new Set(rows.map((item) => item.bookingId))).filter(Boolean);
+  if (uniqueBookingIds.length > 0) {
+    const bookingDocs = await Promise.all(
+      uniqueBookingIds.map((bookingId) => getDoc(doc(db, "bookings", bookingId)))
+    );
+    const paidBookingIds = new Set(
+      bookingDocs
+        .filter((snap) => snap.exists() && String((snap.data() ?? {}).paymentStatus ?? "") === "paid")
+        .map((snap) => snap.id)
+    );
+    rows = rows.filter((row) => paidBookingIds.has(row.bookingId));
+  }
+  rows = rows.sort((a, b) => (toEpochMillis(b.createdAt) || 0) - (toEpochMillis(a.createdAt) || 0));
   const requestBookingIds = new Set(rows.map((item) => item.bookingId));
 
   const bookingsSnap = await getDocs(
@@ -271,6 +335,7 @@ export const getPendingJobs = async (
   );
   const fallbackRows = bookingsSnap.docs
     .filter((entry) => !requestBookingIds.has(entry.id))
+    .filter((entry) => String((entry.data() ?? {}).paymentStatus ?? "") === "paid")
     .map(toJobRequestFromBooking);
 
   const mergedRows = [...rows, ...fallbackRows].sort(
@@ -556,7 +621,6 @@ export const getActiveJobs = async (workerId: string): Promise<WorkerJob[]> => {
           collection(db, "workerJobs"),
           where("workerId", "==", workerId),
           where("status", "==", status),
-          orderBy("scheduledTime", "desc"),
           firestoreLimit(50)
         )
       )
@@ -578,11 +642,14 @@ export const getJobHistory = async (
     query(
       collection(db, "workerJobs"),
       where("workerId", "==", workerId),
-      orderBy("scheduledTime", "desc"),
       firestoreLimit(historyLimit)
     )
   );
-  return snap.docs.map(toWorkerJob);
+  const rows = snap.docs.map(toWorkerJob);
+  rows.sort(
+    (a, b) => (toEpochMillis(b.scheduledTime) || 0) - (toEpochMillis(a.scheduledTime) || 0)
+  );
+  return rows;
 };
 
 export const uploadJobPhoto = async (

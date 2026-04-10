@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       // Update booking with payment info
       const bookingId = paymentData.bookingId;
       await adminDb.collection("bookings").doc(bookingId).update({
-        paymentStatus: "completed",
+        paymentStatus: "paid",
         paymentId: paymentEntity.id,
         updatedAt: new Date(),
       });

@@ -188,6 +188,7 @@ export async function POST(request: Request) {
         providerId,
         serviceCategory,
         status: "pending",
+        paymentStatus: "pending",
         scheduledAt,
         address,
         amount,
@@ -230,7 +231,7 @@ export async function POST(request: Request) {
       });
     });
 
-    return NextResponse.json({ id: bookingRef.id, status: "pending", paymentStatus: "held" });
+    return NextResponse.json({ id: bookingRef.id, status: "pending", paymentStatus: "pending" });
   } catch (error: unknown) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

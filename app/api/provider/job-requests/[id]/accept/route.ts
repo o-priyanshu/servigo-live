@@ -25,19 +25,6 @@ export async function POST(
       if (directReqSnap.exists) {
         resolvedReqRef = directReqRef;
         resolvedReqData = directReqSnap.data() ?? {};
-      } else {
-        const linkedReqSnap = await tx.get(
-          adminDb
-            .collection("jobRequests")
-            .where("bookingId", "==", jobId)
-            .where("workerId", "==", workerId)
-            .where("status", "==", "pending")
-            .limit(1)
-        );
-        if (!linkedReqSnap.empty) {
-          resolvedReqRef = linkedReqSnap.docs[0].ref;
-          resolvedReqData = linkedReqSnap.docs[0].data() ?? {};
-        }
       }
 
       if (resolvedReqRef && resolvedReqData) {
@@ -95,23 +82,19 @@ export async function POST(
         const commission = Math.round(base * 0.15); // Changed from 0.1 to 0.15 (15%)
         const net = base - commission;
 
-        // Check worker's wallet balance
+        // Deduct commission from wallet (allow negative balance for now)
         const workerRef = adminDb.collection("users").doc(workerId);
         const workerSnap = await tx.get(workerRef);
-        if (!workerSnap.exists) {
-          throw new Error("Worker profile not found.");
+        if (workerSnap.exists) {
+          const workerData = workerSnap.data() ?? {};
+          const currentBalance = Number(workerData.walletBalance ?? 0);
+          
+          // Deduct commission (can go negative, will be settled later)
+          tx.update(workerRef, {
+            walletBalance: currentBalance - commission,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
         }
-        const workerData = workerSnap.data() ?? {};
-        const currentBalance = Number(workerData.walletBalance ?? 0);
-        if (currentBalance < commission) {
-          throw new Error(`Insufficient wallet balance. Required: ₹${commission}, Available: ₹${currentBalance}`);
-        }
-
-        // Deduct commission from wallet
-        tx.update(workerRef, {
-          walletBalance: currentBalance - commission,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
 
         tx.update(resolvedReqRef, {
           status: "accepted",
@@ -171,23 +154,19 @@ export async function POST(
       const net = base - commission;
       const scheduledAtRaw = new Date(String(booking.scheduledAt ?? ""));
 
-      // Check worker's wallet balance
+      // Deduct commission from wallet (allow negative balance for now)
       const workerRef = adminDb.collection("users").doc(workerId);
       const workerSnap = await tx.get(workerRef);
-      if (!workerSnap.exists) {
-        throw new Error("Worker profile not found.");
+      if (workerSnap.exists) {
+        const workerData = workerSnap.data() ?? {};
+        const currentBalance = Number(workerData.walletBalance ?? 0);
+        
+        // Deduct commission (can go negative, will be settled later)
+        tx.update(workerRef, {
+          walletBalance: currentBalance - commission,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
       }
-      const workerData = workerSnap.data() ?? {};
-      const currentBalance = Number(workerData.walletBalance ?? 0);
-      if (currentBalance < commission) {
-        throw new Error(`Insufficient wallet balance. Required: ₹${commission}, Available: ₹${currentBalance}`);
-      }
-
-      // Deduct commission from wallet
-      tx.update(workerRef, {
-        walletBalance: currentBalance - commission,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
 
       tx.set(jobRef, {
         bookingId: bookingRef.id,

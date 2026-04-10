@@ -171,24 +171,55 @@ export const useWorkerStore = create<WorkerStore>()(
         };
       },
 
-	      acceptJob: async (jobId) => {
-	        try {
-	          const workerId = resolveWorkerId(get());
-	          await acceptJobService(jobId, workerId);
-	          await Promise.all([get().fetchPendingJobs(), get().fetchActiveJobs()]);
-	          set({ error: null });
-	        } catch (error) {
-	          const message =
-	            error instanceof Error ? error.message : "Failed to accept job.";
-	          set({ error: message });
-	          throw error;
-	        }
-	      },
+      acceptJob: async (jobId) => {
+        const previousJobs = get().pendingJobs;
+        try {
+          const workerId = resolveWorkerId(get());
+          
+          // Optimistic UI update - remove job from pending immediately
+          set((state) => ({
+            pendingJobs: state.pendingJobs.filter((job) => job.id !== jobId),
+            error: null,
+          }));
+
+          // Execute the accept operation
+          await acceptJobService(jobId, workerId);
+          set({ error: null });
+          
+          // Refresh both pending and active jobs for accuracy
+          await Promise.all([get().fetchPendingJobs(), get().fetchActiveJobs()]);
+        } catch (error) {
+          // Revert optimistic update on error
+          set({ 
+            pendingJobs: previousJobs,
+            error: error instanceof Error ? error.message : "Failed to accept job."
+          });
+          throw error;
+        }
+      },
 
       declineJob: async (jobId) => {
-        const workerId = resolveWorkerId(get());
-        await declineJobService(jobId, workerId);
-        await get().fetchPendingJobs();
+        const previousJobs = get().pendingJobs;
+        try {
+          const workerId = resolveWorkerId(get());
+          
+          // Optimistic UI update - remove job from pending immediately
+          set((state) => ({
+            pendingJobs: state.pendingJobs.filter((job) => job.id !== jobId),
+            error: null,
+          }));
+
+          // Execute the decline operation
+          await declineJobService(jobId, workerId);
+          set({ error: null });
+        } catch (error) {
+          // Revert optimistic update on error by restoring previous jobs
+          set({ 
+            pendingJobs: previousJobs,
+            error: error instanceof Error ? error.message : "Failed to decline job."
+          });
+          throw error;
+        }
       },
 
 	      updateJobStatus: async (jobId, status, data) => {

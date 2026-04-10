@@ -17,7 +17,7 @@ import { requireSessionUser } from "@/lib/server/session";
 import type { ServiceCategory } from "@/lib/types/index";
 import { normalizeProviderDisplayName } from "@/lib/server/provider-display";
 import CustomerPageNav from "@/components/customer/shared/CustomerPageNav";
-import RazorpayPayment from "@/components/customer/booking/RazorpayPayment";
+import BookingPaymentSection from "@/components/customer/booking/BookingPaymentSection";
 
 interface BookServicePageProps {
   params: Promise<{ id: string }>;
@@ -97,10 +97,6 @@ export default async function BookServicePage({ params }: BookServicePageProps) 
           </span>
           <h1 className="text-4xl font-bold tracking-tight">Booking Confirmed!</h1>
           <p className="mt-2 text-sm text-emerald-100">Your service appointment has been successfully scheduled.</p>
-          <p className="mx-auto mt-5 inline-flex rounded-lg bg-white/15 px-4 py-2 text-sm font-medium">
-            Booking Reference:&nbsp;
-            <span className="font-bold tracking-wide">SG-2026-{id.slice(0, 4).toUpperCase()}</span>
-          </p>
         </div>
       </section>
 
@@ -188,17 +184,7 @@ export default async function BookServicePage({ params }: BookServicePageProps) 
               </div>
             </div>
 
-            <RazorpayPayment
-              bookingId={id}
-              amount={bookingFee}
-              onSuccess={() => {
-                // Refresh the page to show updated status
-                window.location.reload();
-              }}
-              onError={(error) => {
-                alert(`Payment failed: ${error}`);
-              }}
-            />
+            <BookingPaymentSection bookingId={id} amount={bookingFee} />
 
             <p className="text-xs text-muted-foreground text-center">
               Secure payment powered by Razorpay
