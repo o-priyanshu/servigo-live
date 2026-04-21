@@ -19,28 +19,10 @@ export default function AdminLoginForm() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function bootstrapAndCreateAdminSession() {
+  async function createAdminSession() {
     const user = auth.currentUser;
     if (!user) {
       throw new Error("Authentication state not found. Please try again.");
-    }
-
-    const bootstrapToken = await user.getIdToken(true);
-    const provider = user.providerData[0]?.providerId ?? "password";
-
-    const bootstrapResponse = await fetch("/api/auth/bootstrap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        idToken: bootstrapToken,
-        fullName: user.displayName ?? undefined,
-        provider,
-        roleIntent: "admin",
-      }),
-    });
-    if (!bootstrapResponse.ok) {
-      const payload = (await bootstrapResponse.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(payload?.error ?? "Failed to initialize admin account.");
     }
 
     const idToken = await user.getIdToken(true);
@@ -63,7 +45,7 @@ export default function AdminLoginForm() {
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      await bootstrapAndCreateAdminSession();
+      await createAdminSession();
       router.replace("/admin/dashboard");
       router.refresh();
     } catch (err) {
@@ -84,7 +66,7 @@ export default function AdminLoginForm() {
       provider.setCustomParameters({ prompt: "select_account" });
 
       await signInWithPopup(auth, provider);
-      await bootstrapAndCreateAdminSession();
+      await createAdminSession();
 
       router.replace("/admin/dashboard");
       router.refresh();

@@ -118,6 +118,9 @@ export default async function ProviderProfilePage({
     notFound();
   }
   const provider = providerSnap.data() ?? {};
+  if (String(provider.verificationStatus ?? "") !== "verified") {
+    notFound();
+  }
   const userSnap = await adminDb.collection("users").doc(id).get();
   const user = userSnap.exists ? userSnap.data() ?? {} : {};
 

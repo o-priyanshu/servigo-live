@@ -1,4 +1,4 @@
-export type AuthRoleIntent = "user" | "provider" | "admin";
+export type AuthRoleIntent = "user" | "provider";
 
 const SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
@@ -29,7 +29,7 @@ export function buildAuthHref(
 ): string {
   const params = new URLSearchParams();
 
-  if (options.roleIntent === "provider" || options.roleIntent === "admin") {
+  if (options.roleIntent === "provider") {
     params.set("role", options.roleIntent);
   }
 

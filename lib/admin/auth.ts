@@ -13,11 +13,22 @@ interface AdminTokenPayload {
 }
 
 const encoder = new TextEncoder();
-const ADMIN_JWT_SECRET =
-  process.env.ADMIN_JWT_SECRET ?? "servigo-admin-dev-only-secret-change-in-production";
-const secret = encoder.encode(ADMIN_JWT_SECRET);
+function getAdminSecret(): Uint8Array | null {
+  const raw = process.env.ADMIN_JWT_SECRET?.trim();
+  if (!raw || raw.length < 32) {
+    console.error(
+      "[Admin Auth] ADMIN_JWT_SECRET is missing or too short. Admin sessions are disabled."
+    );
+    return null;
+  }
+  return encoder.encode(raw);
+}
 
 export async function createAdminSessionToken(admin: Admin): Promise<string> {
+  const secret = getAdminSecret();
+  if (!secret) {
+    throw new Error("Admin session secret is not configured.");
+  }
   return await new SignJWT({
     email: admin.email,
     role: admin.role,
@@ -32,6 +43,8 @@ export async function createAdminSessionToken(admin: Admin): Promise<string> {
 }
 
 export async function verifyAdminSessionToken(token: string): Promise<AdminTokenPayload | null> {
+  const secret = getAdminSecret();
+  if (!secret) return null;
   try {
     const { payload } = await jwtVerify(token, secret, {
       algorithms: ["HS256"],

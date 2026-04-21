@@ -8,7 +8,7 @@ interface BootstrapInput {
   fullName?: string;
   provider?: string;
   deviceId?: string;
-  roleIntent?: "user" | "provider" | "admin";
+  roleIntent?: "user" | "provider";
 }
 
 function validateBootstrapInput(body: unknown): BootstrapInput | null {
@@ -29,7 +29,7 @@ function validateBootstrapInput(body: unknown): BootstrapInput | null {
     deviceId:
       typeof deviceId === "string" ? deviceId.trim().slice(0, 128) : undefined,
     roleIntent:
-      rawRoleIntent === "provider" || rawRoleIntent === "user" || rawRoleIntent === "admin"
+      rawRoleIntent === "provider" || rawRoleIntent === "user"
         ? rawRoleIntent
         : undefined,
   };

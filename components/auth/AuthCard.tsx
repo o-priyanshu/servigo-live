@@ -24,7 +24,7 @@ type AuthMode = "signin" | "signup" | "verify";
 
 interface AuthCardProps {
   initialMode?: AuthMode;
-  roleIntent?: "user" | "provider" | "admin";
+  roleIntent?: "user" | "provider";
   callbackUrl?: string;
 }
 
@@ -92,7 +92,7 @@ export function AuthCard({
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedRoleIntent, setSelectedRoleIntent] = useState<"user" | "provider" | "admin">(roleIntent);
+  const [selectedRoleIntent, setSelectedRoleIntent] = useState<"user" | "provider">(roleIntent);
   const router = useRouter();
 
   const safeCallbackUrl = useMemo(() => sanitizeCallbackUrl(callbackUrl), [callbackUrl]);

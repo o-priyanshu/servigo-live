@@ -39,7 +39,7 @@ service cloud.firestore {
     // ── Providers (workers) ───────────────────────────────────────────────────
     match /providers/{providerId} {
       // Customers can read verified providers for discovery
-      allow read: if isSignedIn();
+      allow read: if isOwner(providerId) || isAdmin();
       // Provider can update their own doc; admin has full access
       allow write: if isOwner(providerId) || isAdmin();
     }

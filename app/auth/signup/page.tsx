@@ -11,7 +11,7 @@ export default async function AuthSignupPage({ searchParams }: AuthSignupPagePro
   const sp = (await searchParams) ?? {};
   const roleRaw = Array.isArray(sp.role) ? sp.role[0] : sp.role;
   const callbackRaw = Array.isArray(sp.callbackUrl) ? sp.callbackUrl[0] : sp.callbackUrl;
-  const roleIntent = roleRaw === "provider" ? "provider" : roleRaw === "admin" ? "admin" : "user";
+  const roleIntent = roleRaw === "provider" ? "provider" : "user";
   const callbackUrl = sanitizeCallbackUrl(
     typeof callbackRaw === "string" ? callbackRaw : ""
   );

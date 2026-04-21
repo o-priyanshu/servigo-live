@@ -128,7 +128,7 @@ export async function middleware(request: NextRequest) {
       return clearSessionAndRedirect(request, LOGIN_PATH);
     }
     console.error("[Middleware] System Error:", error);
-    return NextResponse.next(); // Fail open if Google JWKS is down, AuthContext will catch it
+    return clearSessionAndRedirect(request, LOGIN_PATH);
   }
 }
 

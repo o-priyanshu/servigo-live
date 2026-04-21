@@ -11,7 +11,6 @@ import {
   getCustomerBookings as getCustomerBookingsService,
   getFavorites as getFavoritesService,
   getNotifications as getNotificationsService,
-  getWorkerJobsInArea,
   getWorkersNearby,
   markNotificationRead as markNotificationReadService,
   removeFromFavorites as removeFromFavoritesService,
@@ -31,8 +30,6 @@ import {
 } from "zustand/middleware";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const JOBS_IN_AREA_BATCH_SIZE = 10; // max concurrent Firestore reads
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CustomerStore {
   // Location
@@ -120,24 +117,6 @@ function getCurrentCustomerId(): string {
   return uid;
 }
 
-/**
- * FIX Bug 5: Run an async task over an array in batches to avoid
- * hammering Firestore with 50 concurrent reads at once.
- */
-async function runInBatches<T, R>(
-  items: T[],
-  batchSize: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = [];
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(fn));
-    results.push(...batchResults);
-  }
-  return results;
-}
-
 // ─── Store ────────────────────────────────────────────────────────────────────
 export const useCustomerStore = create<CustomerStore>()(
   persist(
@@ -173,39 +152,17 @@ export const useCustomerStore = create<CustomerStore>()(
 
       // ── Workers ────────────────────────────────────────────────────────────
       fetchNearbyWorkers: async (lat, lng, service, options) => {
-        const location = get().selectedLocation;
-        set({ isLoadingWorkers: true, workersError: "" });
-        try {
-          const nearby = await getWorkersNearby(lat, lng, options?.radiusKm ?? 10, {
-            service,
-            gender: options?.gender ?? "any",
-            minRating: options?.minRating,
-            availableOnly: options?.availableOnly,
-          });
+	        set({ isLoadingWorkers: true, workersError: "" });
+	        try {
+	          const nearby = await getWorkersNearby(lat, lng, options?.radiusKm ?? 10, {
+	            service,
+	            gender: options?.gender ?? "any",
+	            minRating: options?.minRating,
+	            availableOnly: options?.availableOnly,
+	          });
 
-          const pincode = location?.pincode;
-
-          // FIX Bug 5: batch the per-worker Firestore reads
-          const enrichedWorkers = pincode
-            ? await runInBatches(
-                nearby,
-                JOBS_IN_AREA_BATCH_SIZE,
-                async (worker) => {
-                  const jobsInArea = await getWorkerJobsInArea(
-                    worker.id,
-                    pincode
-                  ).catch(() => 0);
-                  return {
-                    ...worker,
-                    jobsInArea,
-                    trust: { ...worker.trust, jobsInArea },
-                  };
-                }
-              )
-            : nearby;
-
-          set({ nearbyWorkers: enrichedWorkers, isLoadingWorkers: false });
-        } catch (error: unknown) {
+	          set({ nearbyWorkers: nearby, isLoadingWorkers: false });
+	        } catch (error: unknown) {
           set({
             isLoadingWorkers: false,
             workersError:

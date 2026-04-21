@@ -20,7 +20,7 @@ interface UpsertOptions {
   provider?: string;
   deviceId?: string;
   ip?: string;
-  roleIntent?: "user" | "provider" | "admin";
+  roleIntent?: "user" | "provider";
 }
 
 interface StoredUser {
@@ -115,11 +115,6 @@ export const upsertUserFromIdToken = async ({
     role = "provider";
     isProfileComplete = false;
   }
-  if (roleIntent === "admin" && role !== "admin") {
-    role = "admin";
-    isProfileComplete = true;
-  }
-
   if (role === "provider" && !isProfileComplete) {
     const providerSnap = await adminDb.collection("providers").doc(decoded.uid).get();
     if (providerSnap.exists) {
@@ -151,13 +146,13 @@ export const upsertUserFromIdToken = async ({
 
   if (!existing.exists) {
     const newRole: UserRole =
-      roleIntent === "provider" ? "provider" : roleIntent === "admin" ? "admin" : "user";
+      roleIntent === "provider" ? "provider" : "user";
     await userRef.set({
       ...sharedPayload,
       role: newRole,
       isBlocked: false,
       createdAt: now,
-      isProfileComplete: newRole === "admin" ? true : false,
+      isProfileComplete: false,
     });
     await adminAuth.setCustomUserClaims(decoded.uid, {
       role: newRole,

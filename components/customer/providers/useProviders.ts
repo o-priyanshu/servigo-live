@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
 import type { ServiceCategory } from "@/lib/types/index";
 import type { CustomerProvider, RadiusOption } from "@/components/customer/shared/types";
 import { getProviderProfileImage } from "@/lib/profile-image";
-import { db } from "@/lib/firebase";
 import { useCustomerStore } from "@/store/customerStore";
 
 interface UseProvidersProps {
@@ -38,9 +35,6 @@ export function useProviders({
   const isLoadingWorkers = useCustomerStore((state) => state.isLoadingWorkers);
   const workersError = useCustomerStore((state) => state.workersError);
   const fetchNearbyWorkers = useCustomerStore((state) => state.fetchNearbyWorkers);
-  const [availabilityByWorkerId, setAvailabilityByWorkerId] = useState<
-    Record<string, "online" | "offline" | "busy">
-  >({});
 
   const coords = userCoords ?? (selectedLocation ? { lat: selectedLocation.lat, lng: selectedLocation.lng } : null);
   const currentLat = coords?.lat;
@@ -102,35 +96,10 @@ export function useProviders({
     selectedRadius,
   ]);
 
-  useEffect(() => {
-    if (nearbyWorkers.length === 0) return;
-
-    const unsubscribers = nearbyWorkers.map((worker) =>
-      onSnapshot(doc(db, "providers", worker.id), (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data() as Record<string, unknown>;
-        const fallback = data.isAvailable === true ? "online" : "offline";
-        const statusRaw = String(data.availabilityStatus ?? fallback).toLowerCase();
-        const status: "online" | "offline" | "busy" =
-          statusRaw === "busy" || statusRaw === "online" || statusRaw === "offline"
-            ? statusRaw
-            : fallback;
-        setAvailabilityByWorkerId((prev) => {
-          if (prev[worker.id] === status) return prev;
-          return { ...prev, [worker.id]: status };
-        });
-      })
-    );
-
-    return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [nearbyWorkers]);
-
   const providers = useMemo(() => {
     const favoriteIds = new Set(favorites.map((item) => item.id));
     const mapped: CustomerProvider[] = nearbyWorkers.map((worker) => ({
-      availabilityStatus: availabilityByWorkerId[worker.id] ?? worker.availability,
+      availabilityStatus: worker.availability,
       id: worker.id,
       name: worker.name,
       category: worker.serviceCategory,
@@ -140,7 +109,7 @@ export function useProviders({
         category: worker.serviceCategory,
         photo: worker.photo,
       }),
-      isOnline: (availabilityByWorkerId[worker.id] ?? worker.availability) === "online",
+      isOnline: worker.availability === "online",
       isVerified: worker.isVerified,
       rating: Number(worker.rating ?? 0),
       reviewCount: Number(worker.reviewCount ?? 0),
@@ -190,7 +159,6 @@ export function useProviders({
 
     return filtered;
   }, [
-    availabilityByWorkerId,
     favorites,
     nearbyWorkers,
     onlineOnly,

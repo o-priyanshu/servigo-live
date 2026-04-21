@@ -12,8 +12,8 @@ interface AuthFormProps {
   setMode: (mode: "signin" | "signup" | "verify") => void;
   isLoading: boolean;
   errorMessage: string | null;
-  roleIntent: "user" | "provider" | "admin";
-  onRoleIntentChange: (role: "user" | "provider" | "admin") => void;
+  roleIntent: "user" | "provider";
+  onRoleIntentChange: (role: "user" | "provider") => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onGoogleAuth: () => void;
   onForgotPassword?: () => void;

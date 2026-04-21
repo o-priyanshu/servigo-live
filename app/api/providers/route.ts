@@ -21,7 +21,7 @@ interface ProviderListItem {
   serviceRadiusKm: number;
   hourlyRate: number;
   skills: string[];
-  location: { lat: number; lng: number; city: string };
+  location: { city: string };
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -74,9 +74,11 @@ export async function GET(request: Request) {
     const sortBy = parseSortBy(searchParams.get("sortBy"));
     const search = (searchParams.get("search") ?? "").trim().toLowerCase();
 
-    await ensureSeedProviders();
-    if (lat !== null && lng !== null) {
-      await ensureLocalSeedProviders(lat, lng);
+    if (process.env.NODE_ENV !== "production") {
+      await ensureSeedProviders();
+      if (lat !== null && lng !== null) {
+        await ensureLocalSeedProviders(lat, lng);
+      }
     }
 
     const providersSnap = await adminDb
@@ -154,8 +156,6 @@ export async function GET(request: Request) {
               .slice(0, 6)
           : [],
         location: {
-          lat: Number.isFinite(pLat) ? pLat : 0,
-          lng: Number.isFinite(pLng) ? pLng : 0,
           city: String(location.city ?? ""),
         },
       };
