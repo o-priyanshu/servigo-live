@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShieldCheck, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import WorkerRatingDisplay from "@/components/rating/WorkerRatingDisplay";
 import ProviderSectionHeader from "@/components/provider/ProviderSectionHeader";
 import ProviderStatusPill from "@/components/provider/ProviderStatusPill";
 import { useAuth } from "@/context/AuthContext";
@@ -12,13 +13,7 @@ import type { ServiceCategory } from "@/lib/types/index";
 import { getWorkerProfile, updateWorkerProfile, uploadWorkerDocument } from "@/services/firebase/workerAuth";
 import { useWorkerStore } from "@/store/workerStore";
 
-const reviewPreview = [
-  { by: "Rahul S.", text: "On time and solved issue safely." },
-  { by: "Megha P.", text: "Professional behavior and clear pricing." },
-  { by: "Rakesh T.", text: "Quick diagnosis, quality work." },
-];
-
-export default function ProviderProfilePage() {
+  export default function ProviderProfilePage() {
   const { firebaseUser } = useAuth();
   const worker = useWorkerStore((state) => state.worker);
   const setWorker = useWorkerStore((state) => state.setWorker);
@@ -246,26 +241,13 @@ export default function ProviderProfilePage() {
           <h3 className="text-lg font-semibold">Trust & Performance</h3>
           <p className="inline-flex items-center gap-2 text-sm">
             <Star size={16} className="fill-amber-400 text-amber-400" />
-            {(worker?.rating ?? 0).toFixed(1)} ({worker?.ratingCount ?? 0} reviews)
+            {(worker?.averageRating ?? worker?.rating ?? 0).toFixed(1)} ({worker?.totalRatings ?? worker?.ratingCount ?? 0} reviews)
           </p>
           <p className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
             <ShieldCheck size={16} />
             Verification badge active
           </p>
-
-          <div>
-            <h4 className="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              Reviews Preview
-            </h4>
-            <div className="space-y-2">
-              {reviewPreview.map((review) => (
-                <div key={review.by} className="rounded-lg border border-border p-3 text-sm">
-                  <p className="font-medium">{review.by}</p>
-                  <p className="text-muted-foreground">{review.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          {firebaseUser?.uid ? <WorkerRatingDisplay workerId={firebaseUser.uid} /> : null}
         </article>
       </section>
     </div>

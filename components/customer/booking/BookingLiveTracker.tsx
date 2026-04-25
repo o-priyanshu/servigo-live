@@ -6,7 +6,14 @@ import { getWorkerLocation } from "@/services/firebase/location";
 import { subscribeToBookingUpdates } from "@/services/firebase/booking";
 import type { Booking } from "@/services/firebase/types";
 
-type TimelineStep = "confirmed" | "on_way" | "arrived" | "completed";
+type TimelineStep =
+  | "confirmed"
+  | "on_way"
+  | "arrived"
+  | "working"
+  | "awaiting_confirmation"
+  | "extension_requested"
+  | "completed";
 
 interface BookingLiveTrackerProps {
   bookingId: string;
@@ -33,9 +40,11 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
 
 function getStepFromStatus(status: string, distanceKm: number | null): TimelineStep {
   if (status === "completed") return "completed";
+  if (status === "awaiting_customer_confirmation") return "awaiting_confirmation";
+  if (status === "extension_requested") return "extension_requested";
   if (status === "in_progress") {
     if (distanceKm !== null && distanceKm <= 0.2) return "arrived";
-    return "on_way";
+    return "working";
   }
   if (status === "confirmed") return "confirmed";
   return "confirmed";
@@ -52,6 +61,9 @@ const steps: Array<{ id: TimelineStep; label: string }> = [
   { id: "confirmed", label: "Confirmed" },
   { id: "on_way", label: "On way" },
   { id: "arrived", label: "Arrived" },
+  { id: "working", label: "Working" },
+  { id: "awaiting_confirmation", label: "Waiting approval" },
+  { id: "extension_requested", label: "Extension requested" },
   { id: "completed", label: "Completed" },
 ];
 
@@ -65,8 +77,9 @@ export default function BookingLiveTracker({
   const [workerLocation, setWorkerLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [entryPhotoUrl, setEntryPhotoUrl] = useState<string | null>(null);
-  const [locationError, setLocationError] = useState("");
-  const [now, setNow] = useState<number>(Date.now());
+  const [locationIssue, setLocationIssue] = useState("");
+  const [now, setNow] = useState<number>(() => Date.now());
+  const geolocationSupported = typeof navigator !== "undefined" && "geolocation" in navigator;
 
   useEffect(() => {
     const unsubBooking = subscribeToBookingUpdates(bookingId, (booking: Booking) => {
@@ -94,10 +107,7 @@ export default function BookingLiveTracker({
   }, []);
 
   useEffect(() => {
-    if (!("geolocation" in navigator)) {
-      setLocationError("Customer location unavailable.");
-      return;
-    }
+    if (!geolocationSupported) return;
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setCustomerLocation({
@@ -106,11 +116,11 @@ export default function BookingLiveTracker({
         });
       },
       () => {
-        setLocationError("Allow location for accurate ETA.");
+        setLocationIssue("Allow location for accurate ETA.");
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 }
     );
-  }, []);
+  }, [geolocationSupported]);
 
   const distanceKm = useMemo(() => {
     if (!workerLocation || !customerLocation) return null;
@@ -206,7 +216,11 @@ export default function BookingLiveTracker({
           Worker is approximately {distanceKm.toFixed(1)} km away.
         </p>
       ) : null}
-      {locationError ? <p className="mt-2 text-xs text-muted-foreground">{locationError}</p> : null}
+      {!geolocationSupported ? (
+        <p className="mt-2 text-xs text-muted-foreground">Customer location unavailable.</p>
+      ) : locationIssue ? (
+        <p className="mt-2 text-xs text-muted-foreground">{locationIssue}</p>
+      ) : null}
 
       {entryPhotoUrl ? (
         <div className="mt-4 rounded-xl border border-border bg-background p-3">
@@ -227,4 +241,3 @@ export default function BookingLiveTracker({
     </section>
   );
 }
-

@@ -7,13 +7,14 @@ import type { ServiceCategory } from "@/lib/types/index";
 import type { RadiusOption } from "@/components/customer/shared/types";
 import { buildAuthHref } from "@/lib/auth/callback-url";
 
-type BookingViewFilter = "pending" | "confirmed" | "cancelled";
+type BookingViewFilter = "pending" | "confirmed" | "completed" | "cancelled";
 type ProviderSort = "recommended" | "nearest" | "rating" | "price";
 type ProfileSection =
   | "addresses"
   | "favorites"
   | "notifications"
   | "history"
+  | "ratings"
   | "safety"
   | "support"
   | null;
@@ -35,6 +36,7 @@ export function useDashboard() {
     profileSectionParam === "favorites" ||
     profileSectionParam === "notifications" ||
     profileSectionParam === "history" ||
+    profileSectionParam === "ratings" ||
     profileSectionParam === "safety" ||
     profileSectionParam === "support"
       ? profileSectionParam

@@ -14,9 +14,16 @@ import EmptyState  from "@/components/customer/shared/EmptyState";
 import type { CustomerBookingCardData } from "@/components/customer/shared/types";
 import { useRouter } from "next/navigation";
 
-type BookingFilter = "pending" | "confirmed" | "cancelled";
+type BookingFilter = "pending" | "confirmed" | "completed" | "cancelled";
 
-const MESSAGE_ALLOWED = new Set(["pending", "confirmed", "in_progress", "completed"]);
+const MESSAGE_ALLOWED = new Set([
+  "pending",
+  "confirmed",
+  "in_progress",
+  "awaiting_customer_confirmation",
+  "extension_requested",
+  "completed",
+]);
 
 function canMessageBooking(status: CustomerBookingCardData["status"]) {
   return MESSAGE_ALLOWED.has(status);
@@ -65,6 +72,10 @@ export default function DashboardBookings({
   }, [endDate, filteredBookings, searchQuery, startDate]);
 
   const selectedBooking = visibleBookings[0];
+  const actionRequiredBooking = visibleBookings.find(
+    (booking) =>
+      booking.status === "awaiting_customer_confirmation" || booking.status === "extension_requested"
+  );
 
   function handleDownloadReceipt(booking: CustomerBookingCardData) {
     const html = `
@@ -103,6 +114,7 @@ export default function DashboardBookings({
         {[
           { key: "pending", label: "Pending" },
           { key: "confirmed", label: "Confirmed" },
+          { key: "completed", label: "Completed" },
           { key: "cancelled", label: "Cancelled" },
         ].map((item) => (
           <button
@@ -118,6 +130,21 @@ export default function DashboardBookings({
           </button>
         ))}
       </div>
+
+      {actionRequiredBooking ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+              <p className="text-sm font-semibold text-amber-900">Action needed</p>
+              <p className="mt-1 text-sm text-amber-800">
+                Your worker has requested confirmation or extra time. Open the booking details to approve or reject it.
+              </p>
+          <Button
+            className="mt-3 h-9 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+            onClick={() => router.push(`/bookings/${actionRequiredBooking.id}?from=${encodeURIComponent("/dashboard?tab=bookings")}`)}
+          >
+            Review request
+          </Button>
+        </div>
+      ) : null}
 
       <div className="grid gap-2 rounded-2xl border border-border/70 bg-card/85 p-3 shadow-sm md:grid-cols-3">
         <input

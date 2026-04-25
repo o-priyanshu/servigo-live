@@ -7,6 +7,10 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+function ratingDocId(bookingId: string, userId: string): string {
+  return `${bookingId}_${userId}`;
+}
+
 export async function GET(_: Request, context: RouteContext) {
   try {
     const sessionUser = await requireSessionUser();
@@ -17,8 +21,20 @@ export async function GET(_: Request, context: RouteContext) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
     const booking = bookingSnap.data() ?? {};
-    if (booking.customerId !== sessionUser.uid) {
+    if (booking.customerId !== sessionUser.uid && booking.providerId !== sessionUser.uid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const ratingSnap = await adminDb.collection("ratings").doc(ratingDocId(id, sessionUser.uid)).get();
+    if (ratingSnap.exists) {
+      const data = ratingSnap.data() ?? {};
+      return NextResponse.json({
+        review: {
+          ...data,
+          rating: Number(data.overallRating ?? 0),
+          comment: String(data.reviewText ?? ""),
+        },
+      });
     }
 
     const reviewSnap = await adminDb.collection("reviews").doc(id).get();
@@ -57,53 +73,68 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const body = await request.json().catch(() => null);
-    const rating = Number(body?.rating);
-    const comment = String(body?.comment ?? "").trim();
+    const rating = Number(body?.rating ?? body?.overallRating);
+    const comment = String(body?.comment ?? body?.reviewText ?? "").trim();
+    const criteriaRatings =
+      (body?.criteriaRatings && typeof body.criteriaRatings === "object" ? body.criteriaRatings : null) ?? {
+        punctuality: rating,
+        quality: rating,
+        behavior: rating,
+        cleanliness: rating,
+        valueForMoney: rating,
+      };
+    const tags = Array.isArray(body?.tags) ? body.tags.filter((item: unknown) => typeof item === "string") : [];
 
-    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return NextResponse.json({ error: "Rating must be between 1 and 5" }, { status: 400 });
     }
     if (comment.length < 3 || comment.length > 2000) {
       return NextResponse.json({ error: "Comment length is invalid" }, { status: 400 });
     }
 
-    const reviewRef = adminDb.collection("reviews").doc(id);
-    const existing = await reviewRef.get();
+    const ratingRef = adminDb.collection("ratings").doc(ratingDocId(id, sessionUser.uid));
+    const existing = await ratingRef.get();
     if (existing.exists) {
       return NextResponse.json({ error: "Review already submitted" }, { status: 409 });
     }
 
-    const providerRef = adminDb.collection("providers").doc(String(booking.providerId));
+    const ratingPayload = {
+      bookingId: id,
+      raterId: sessionUser.uid,
+      raterType: "customer",
+      ratedId: String(booking.providerId ?? ""),
+      ratedType: "worker",
+      overallRating: rating,
+      criteriaRatings: {
+        punctuality: Number((criteriaRatings as Record<string, unknown>).punctuality ?? rating),
+        quality: Number((criteriaRatings as Record<string, unknown>).quality ?? rating),
+        behavior: Number((criteriaRatings as Record<string, unknown>).behavior ?? rating),
+        cleanliness: Number((criteriaRatings as Record<string, unknown>).cleanliness ?? rating),
+        valueForMoney: Number((criteriaRatings as Record<string, unknown>).valueForMoney ?? rating),
+      },
+      comment,
+      reviewText: comment,
+      tags,
+      status: "submitted",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
     await adminDb.runTransaction(async (tx) => {
-      const providerSnap = await tx.get(providerRef);
-      if (!providerSnap.exists) return;
-
-      const data = providerSnap.data() ?? {};
-      const currentCount = Number(data.reviewCount ?? 0);
-      const currentRating = Number(data.rating ?? 0);
-
-      const nextCount = currentCount + 1;
-      const nextRating = (currentRating * currentCount + rating) / nextCount;
-
+      const legacyReviewRef = adminDb.collection("reviews").doc(id);
+      tx.set(ratingRef, ratingPayload);
       tx.set(
-        providerRef,
+        legacyReviewRef,
         {
-          reviewCount: nextCount,
-          rating: Number(nextRating.toFixed(2)),
-          updatedAt: FieldValue.serverTimestamp(),
+          bookingId: id,
+          providerId: booking.providerId,
+          customerId: sessionUser.uid,
+          rating,
+          comment,
+          createdAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
-
-      // Also mark review as submitted on the reviewRef within the same transaction
-      tx.set(reviewRef, {
-        bookingId: id,
-        providerId: booking.providerId,
-        customerId: sessionUser.uid,
-        rating,
-        comment,
-        createdAt: FieldValue.serverTimestamp(),
-      });
     });
 
     return NextResponse.json({ ok: true }, { status: 201 });

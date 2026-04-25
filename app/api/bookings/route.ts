@@ -6,7 +6,13 @@ import type { ServiceCategory } from "@/lib/types/index";
 import { normalizeProviderDisplayName } from "@/lib/server/provider-display";
 import { getProviderProfileImage } from "@/lib/profile-image";
 
-const ACTIVE_BOOKING_STATUSES = ["pending", "confirmed", "in_progress"] as const;
+const ACTIVE_BOOKING_STATUSES = [
+  "pending",
+  "confirmed",
+  "in_progress",
+  "awaiting_customer_confirmation",
+  "extension_requested",
+] as const;
 const REQUEST_TTL_MS = 15 * 60 * 1000;
 
 function extractPincode(value: string): string {
@@ -178,6 +184,7 @@ export async function POST(request: Request) {
     const jobRequestRef = adminDb.collection("jobRequests").doc();
     const now = FieldValue.serverTimestamp();
     const expiresAt = new Date(Date.now() + REQUEST_TTL_MS);
+    const serviceDeadlineAt = new Date(scheduledDate.getTime() + 60 * 60 * 1000).toISOString();
 
     const customerSnap = await adminDb.collection("users").doc(sessionUser.uid).get();
     const customer = customerSnap.exists ? customerSnap.data() ?? {} : {};
@@ -199,6 +206,7 @@ export async function POST(request: Request) {
           heldBy: "platform",
           heldAt: now,
         },
+        serviceDeadlineAt,
         createdAt: now,
         updatedAt: now,
       });

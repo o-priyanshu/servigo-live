@@ -16,6 +16,8 @@ interface ProviderListItem {
   isVerified: boolean;
   rating: number;
   reviewCount: number;
+  averageRating?: number;
+  totalRatings?: number;
   experienceYears: number;
   distanceKm: number;
   serviceRadiusKm: number;
@@ -137,8 +139,10 @@ export async function GET(request: Request) {
         category: categoryValue,
         isOnline: data.isAvailable === true,
         isVerified: String(data.verificationStatus ?? "") === "verified",
-        rating: Number(Number(data.rating ?? 0).toFixed(1)),
-        reviewCount: Number(data.reviewCount ?? 0),
+        rating: Number(Number(data.averageRating ?? data.rating ?? 0).toFixed(1)),
+        reviewCount: Number(data.totalRatings ?? data.reviewCount ?? 0),
+        averageRating: Number(Number(data.averageRating ?? data.rating ?? 0).toFixed(1)),
+        totalRatings: Number(data.totalRatings ?? data.reviewCount ?? 0),
         experienceYears: Number(data.yearsOfExperience ?? 0),
         distanceKm: Number(distance.toFixed(1)),
         serviceRadiusKm: Number(data.serviceRadius ?? 0),

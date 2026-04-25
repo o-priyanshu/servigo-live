@@ -115,6 +115,12 @@ function toWorkerJobData(id: string, data: Record<string, unknown>): WorkerJob {
     scheduledTime: data.scheduledTime,
     actualStartTime: data.actualStartTime,
     actualEndTime: data.actualEndTime,
+    completionRequestedAt: data.completionRequestedAt,
+    extensionRequestedAt: data.extensionRequestedAt,
+    requestedExtensionMinutes:
+      typeof data.requestedExtensionMinutes === "number"
+        ? data.requestedExtensionMinutes
+        : undefined,
     status: data.status ?? "accepted",
     price: {
       base: Number(price.base ?? 0),
@@ -133,6 +139,8 @@ function toWorkerJobData(id: string, data: Record<string, unknown>): WorkerJob {
                 status === "on_way" ||
                 status === "arrived" ||
                 status === "working" ||
+                status === "completion_requested" ||
+                status === "extension_requested" ||
                 status === "completed" ||
                 status === "cancelled") &&
               at
@@ -550,6 +558,10 @@ export const updateJobStatus = async (
   status: WorkerJobStatus,
   data?: Record<string, unknown>
 ): Promise<void> => {
+  if (status === "completed") {
+    throw new Error("Use requestJobCompletion for final job completion.");
+  }
+
   const updatePayload: Record<string, unknown> = {
     status,
     updatedAt: serverTimestamp(),
@@ -560,60 +572,57 @@ export const updateJobStatus = async (
   if (status === "working") {
     updatePayload.actualStartTime = serverTimestamp();
   }
-  if (status === "completed") {
-    updatePayload.actualEndTime = serverTimestamp();
-    updatePayload.paymentStatus = "released";
-  }
 
   const jobRef = doc(db, "workerJobs", jobId);
   await updateDoc(jobRef, updatePayload);
+};
 
-  if (status === "completed" && typeof data?.bookingId === "string") {
-    const [jobSnap, existingEarningSnap] = await Promise.all([
-      getDoc(jobRef),
-      getDocs(
-        query(collection(db, "workerEarnings"), where("jobId", "==", jobId), firestoreLimit(1))
-      ).catch(() => null),
-    ]);
-
-    await updateDoc(doc(db, "bookings", data.bookingId), {
-      status: "completed",
-      paymentStatus: "captured",
-      updatedAt: serverTimestamp(),
-    });
-
-    const jobData = jobSnap.data();
-    const workerId =
-      typeof data?.workerId === "string"
-        ? data.workerId
-        : String(jobData?.workerId ?? "");
-    const net = Number(jobData?.price?.net ?? 0);
-    const amount = Number(jobData?.price?.base ?? 0);
-    const commission = Number(jobData?.price?.commission ?? 0);
-
-    if (
-      workerId &&
-      amount >= 0 &&
-      commission >= 0 &&
-      net >= 0 &&
-      (!existingEarningSnap || existingEarningSnap.empty)
-    ) {
-      await addDoc(collection(db, "workerEarnings"), {
-        workerId,
-        jobId,
-        amount,
-        commission,
-        net,
-        status: "released",
-        releasedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      });
-    }
+async function callBookingWorkflow(
+  bookingId: string,
+  action: string,
+  payload?: Record<string, unknown>
+): Promise<void> {
+  const res = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/workflow`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...(payload ?? {}) }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data?.error === "string" ? data.error : "Failed to update booking workflow.");
   }
+}
+
+export const requestJobCompletion = async (jobId: string, bookingId: string): Promise<void> => {
+  if (!bookingId) {
+    throw new Error("Booking id is required.");
+  }
+  await callBookingWorkflow(bookingId, "request_completion", { jobId });
+};
+
+export const requestJobExtension = async (
+  jobId: string,
+  bookingId: string,
+  extraMinutes: number
+): Promise<void> => {
+  if (!bookingId) {
+    throw new Error("Booking id is required.");
+  }
+  if (!Number.isInteger(extraMinutes) || extraMinutes < 5 || extraMinutes > 240) {
+    throw new Error("Extension minutes must be between 5 and 240.");
+  }
+  await callBookingWorkflow(bookingId, "request_extension", { jobId, extraMinutes });
 };
 
 export const getActiveJobs = async (workerId: string): Promise<WorkerJob[]> => {
-  const activeStatuses: WorkerJobStatus[] = ["accepted", "on_way", "arrived", "working"];
+  const activeStatuses: WorkerJobStatus[] = [
+    "accepted",
+    "on_way",
+    "arrived",
+    "working",
+    "completion_requested",
+    "extension_requested",
+  ];
   const snapshots = await Promise.all(
     activeStatuses.map((status) =>
       getDocs(

@@ -75,6 +75,7 @@ export default function ProviderDashboardPage() {
   const acceptJob = useWorkerStore((state) => state.acceptJob);
   const declineJob = useWorkerStore((state) => state.declineJob);
   const updateJobStatus = useWorkerStore((state) => state.updateJobStatus);
+  const requestJobCompletion = useWorkerStore((state) => state.requestJobCompletion);
   const updateLocation = useWorkerStore((state) => state.updateLocation);
   const [recentJobs, setRecentJobs] = useState<WorkerJob[]>([]);
   const [allJobs, setAllJobs] = useState<WorkerJob[]>([]);
@@ -193,6 +194,10 @@ export default function ProviderDashboardPage() {
           ? "in_progress"
           : job.status === "on_way" || job.status === "arrived"
           ? "on_the_way"
+          : job.status === "completion_requested"
+          ? "waiting_customer"
+          : job.status === "extension_requested"
+          ? "extension_requested"
           : job.status === "completed"
           ? "completed"
           : job.status === "cancelled"
@@ -295,15 +300,12 @@ export default function ProviderDashboardPage() {
   async function handleCompleteJob(id: string) {
     try {
       const source = activeJobs.find((entry) => entry.id === id);
-      await updateJobStatus(id, "completed", {
-        bookingId: source?.bookingId,
-        workerId: source?.workerId,
-      });
-      toast.success("✓ Job Marked as Complete");
+      await requestJobCompletion(id, source?.bookingId ?? "");
+      toast.success("✓ Completion request sent to customer");
       await Promise.all([refreshHistory(), fetchActiveJobs(), fetchPendingJobs(), fetchEarnings()]);
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : "Failed to complete job";
-      toast.error(`Failed to complete job: ${errorMsg}`);
+      const errorMsg = error instanceof Error ? error.message : "Failed to request completion";
+      toast.error(`Failed to request completion: ${errorMsg}`);
     }
   }
 
@@ -487,4 +489,3 @@ export default function ProviderDashboardPage() {
     </div>
   );
 }
-

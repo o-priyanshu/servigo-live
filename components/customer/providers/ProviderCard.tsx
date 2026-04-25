@@ -33,7 +33,11 @@ const ProviderCard = ({ provider, index }: ProviderCardProps) => {
     ? `/provider/${providerId}?from=${returnToDashboard}${pincodeParam}`
     : "";
   const categoryLabel = providerCategory.replaceAll("_", " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
-  const ratingLabel = Number.isFinite(provider.rating) ? provider.rating.toFixed(1) : "0.0";
+  const ratingValue = Number.isFinite(provider.averageRating ?? provider.rating)
+    ? Number(provider.averageRating ?? provider.rating)
+    : 0;
+  const ratingLabel = ratingValue.toFixed(1);
+  const totalRatings = provider.totalRatings ?? provider.reviewCount ?? 0;
   const hasDistance = Number.isFinite(provider.distanceKm) && provider.distanceKm >= 0;
   const distanceLabel = hasDistance
     ? provider.distanceKm > 0 && provider.distanceKm < 0.1
@@ -113,7 +117,7 @@ const ProviderCard = ({ provider, index }: ProviderCardProps) => {
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1 font-medium text-foreground">
               <Star size={14} className="fill-amber-400 text-amber-400" />
-              {ratingLabel} <span className="text-muted-foreground">({provider.reviewCount})</span>
+              {ratingLabel} <span className="text-muted-foreground">({totalRatings})</span>
             </span>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Briefcase size={12} />

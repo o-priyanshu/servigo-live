@@ -12,6 +12,8 @@ export type JobStatus =
   | "accepted"
   | "on_the_way"
   | "in_progress"
+  | "waiting_customer"
+  | "extension_requested"
   | "completed"
   | "cancelled";
 

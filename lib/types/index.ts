@@ -23,6 +23,8 @@ export type BookingStatus =
   | "pending"      // matches createBooking action initial status
   | "confirmed"
   | "in_progress"
+  | "awaiting_customer_confirmation"
+  | "extension_requested"
   | "completed"
   | "cancelled";
 

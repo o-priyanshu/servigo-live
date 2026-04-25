@@ -142,7 +142,7 @@ export default function ProviderJobCard({
         {job.status === "in_progress" ? (
           <>
             <Button className="h-10" onClick={() => onComplete?.(job.id)}>
-              Mark Complete
+              Request Completion
             </Button>
             {job.canMessage ? (
               <Button variant="outline" className="h-10" onClick={() => onMessage?.(job.id)}>
@@ -154,6 +154,11 @@ export default function ProviderJobCard({
               </Button>
             )}
           </>
+        ) : null}
+        {job.status === "waiting_customer" || job.status === "extension_requested" ? (
+          <Button variant="outline" className="h-10 sm:col-span-2" onClick={() => onOpen?.(job.id)}>
+            Waiting for customer response
+          </Button>
         ) : null}
         {job.status === "completed" || job.status === "cancelled" ? (
           <Button variant="outline" className="h-10 sm:col-span-2" onClick={() => onOpen?.(job.id)}>

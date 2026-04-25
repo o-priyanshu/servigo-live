@@ -15,6 +15,25 @@ service cloud.firestore {
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
+    function validScore(value) {
+      return value is int && value >= 1 && value <= 5;
+    }
+    function validWorkerCriteria(criteria) {
+      return (!("punctuality" in criteria) || validScore(criteria.punctuality)) &&
+        (!("quality" in criteria) || validScore(criteria.quality)) &&
+        (!("behavior" in criteria) || validScore(criteria.behavior)) &&
+        (!("cleanliness" in criteria) || validScore(criteria.cleanliness)) &&
+        (!("valueForMoney" in criteria) || validScore(criteria.valueForMoney));
+    }
+    function validCustomerCriteria(criteria) {
+      return (
+        (!("behavior" in criteria) || validScore(criteria.behavior)) &&
+        (!("customerBehavior" in criteria) || validScore(criteria.customerBehavior)) &&
+        (!("paymentPromptness" in criteria) || validScore(criteria.paymentPromptness)) &&
+        (!("accessibility" in criteria) || validScore(criteria.accessibility)) &&
+        (!("communication" in criteria) || validScore(criteria.communication))
+      );
+    }
 
     // ── Users ─────────────────────────────────────────────────────────────────
     match /users/{userId} {
@@ -59,11 +78,19 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.auth.uid == request.resource.data.customerId &&
         request.resource.data.status == 'pending';
-      allow update: if isSignedIn() && (
-        request.auth.uid == resource.data.customerId ||
-        request.auth.uid == resource.data.providerId ||
-        isAdmin()
-      );
+      allow update: if isAdmin() ||
+        (
+          isSignedIn() &&
+          request.auth.uid == resource.data.providerId &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status in ['confirmed', 'cancelled']
+        ) ||
+        (
+          isSignedIn() &&
+          request.auth.uid == resource.data.customerId &&
+          resource.data.status in ['pending', 'confirmed'] &&
+          request.resource.data.status == 'cancelled'
+        );
       allow delete: if isAdmin();
 
       // Disputes as sub-collection
@@ -102,8 +129,12 @@ service cloud.firestore {
       );
       allow create: if isSignedIn() &&
         request.auth.uid == request.resource.data.workerId;
-      allow update: if isSignedIn() && (
-        request.auth.uid == resource.data.workerId || isAdmin()
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        request.auth.uid == resource.data.workerId &&
+        request.resource.data.status in ['accepted', 'on_way', 'arrived', 'working'] &&
+        !(request.resource.data.status == 'completed') &&
+        !(request.resource.data.status == 'cancelled')
       );
     }
 
@@ -153,6 +184,45 @@ service cloud.firestore {
       allow read: if isSignedIn();
       // Written inside completeBooking transaction — matches booking.ts
       allow write: if isSignedIn();
+    }
+
+    // ── Ratings ───────────────────────────────────────────────────────────────
+    match /ratings/{ratingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.raterId == request.auth.uid
+        && ratingId == request.resource.data.bookingId + '_' + request.auth.uid
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.overallRating is int
+        && validScore(request.resource.data.overallRating)
+        && request.resource.data.reviewText is string
+        && request.resource.data.reviewText.size() <= 2000
+        && request.resource.data.tags is list
+        && request.resource.data.bookingId is string
+        && request.resource.data.ratedId is string
+        && request.resource.data.raterType is string
+        && request.resource.data.ratedType is string
+        && request.resource.data.raterType in ['customer', 'worker']
+        && request.resource.data.ratedType in ['customer', 'worker']
+        && exists(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.status == 'completed'
+        && (
+          (
+            request.resource.data.raterType == 'customer' &&
+            request.resource.data.ratedType == 'worker' &&
+            request.resource.data.ratedId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.providerId &&
+            request.resource.data.raterId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.customerId &&
+            validWorkerCriteria(request.resource.data.criteriaRatings)
+          ) || (
+            request.resource.data.raterType == 'worker' &&
+            request.resource.data.ratedType == 'customer' &&
+            request.resource.data.ratedId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.customerId &&
+            request.resource.data.raterId == get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.providerId &&
+            validCustomerCriteria(request.resource.data.criteriaRatings)
+          )
+        )
+        && !exists(/databases/$(database)/documents/ratings/$(ratingId));
+      allow update, delete: if isAdmin();
     }
 
     // ── Notifications ─────────────────────────────────────────────────────────

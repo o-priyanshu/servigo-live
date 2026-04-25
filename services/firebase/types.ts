@@ -4,6 +4,63 @@ import type { Timestamp } from "firebase/firestore";
 export type WorkerGender = "male" | "female" | "other" | "any";
 export type WorkerAvailability = "online" | "offline" | "busy";
 export type TrustBadge = "gold" | "silver" | "bronze";
+export type RatingTargetType = "customer" | "worker";
+export type RatingStatus = "submitted" | "auto_generated" | "removed";
+
+export interface RatingCriteriaWorker {
+  punctuality?: number;
+  quality?: number;
+  behavior?: number;
+  cleanliness?: number;
+  valueForMoney?: number;
+}
+
+export interface RatingCriteriaCustomer {
+  behavior?: number;
+  paymentPromptness?: number;
+  accessibility?: number;
+  communication?: number;
+}
+
+export interface Rating {
+  id: string;
+  bookingId: string;
+  raterId: string;
+  raterType: RatingTargetType;
+  ratedId: string;
+  ratedType: RatingTargetType;
+  overallRating: number;
+  criteriaRatings: RatingCriteriaWorker | RatingCriteriaCustomer;
+  reviewText: string;
+  tags: string[];
+  status: RatingStatus;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+export interface WorkerRatingData {
+  averageRating: number;
+  totalRatings: number;
+  distribution: { 1: number; 2: number; 3: number; 4: number; 5: number };
+  criteriaAverages: {
+    punctuality: number;
+    quality: number;
+    behavior: number;
+    cleanliness: number;
+    valueForMoney: number;
+  };
+}
+
+export interface CustomerRatingData {
+  averageRating: number;
+  totalRatings: number;
+  criteriaAverages: {
+    behavior: number;
+    paymentPromptness: number;
+    accessibility: number;
+    communication: number;
+  };
+}
 
 export interface Customer {
   uid: string;
@@ -13,6 +70,9 @@ export interface Customer {
   photoUrl?: string;
   referralCode?: string;
   subscriptionPlan?: "basic" | "family" | "premium";
+  averageRating?: number;
+  totalRatings?: number;
+  criteriaAverages?: CustomerRatingData["criteriaAverages"];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -57,6 +117,8 @@ export interface Worker {
   gender: Exclude<WorkerGender, "any">;
   rating: number;
   reviewCount: number;
+  averageRating?: number;
+  totalRatings?: number;
   yearsOfExperience: number;
   serviceRadius?: number;
   baseRate: number;
@@ -108,6 +170,14 @@ export interface Booking {
   jobPhotos?: string[];
   cancellationReason?: string;
   cancellationCharge?: number;
+  serviceDeadlineAt?: string;
+  completionRequestedAt?: string;
+  completionRequestedBy?: string;
+  completionApprovedAt?: string;
+  extensionRequestedAt?: string;
+  extensionRequestedBy?: string;
+  requestedExtensionMinutes?: number;
+  extensionApprovedAt?: string;
   createdAt?: string;
   updatedAt?: string;
   completedAt?: string;
@@ -185,6 +255,11 @@ export interface WorkerProfile {
   totalEarnings: number;
   rating: number;
   ratingCount: number;
+  averageRating?: number;
+  totalRatings?: number;
+  ratingSum?: number;
+  criteriaAverages?: WorkerRatingData["criteriaAverages"];
+  ratingDistribution?: WorkerRatingData["distribution"];
   cancellationRate: number;
   responseRate: number;
   hubId?: string;
@@ -261,6 +336,8 @@ export type WorkerJobStatus =
   | "on_way"
   | "arrived"
   | "working"
+  | "completion_requested"
+  | "extension_requested"
   | "completed"
   | "cancelled";
 
@@ -278,6 +355,9 @@ export interface WorkerJob {
   scheduledTime: Timestamp;
   actualStartTime?: Timestamp;
   actualEndTime?: Timestamp;
+  completionRequestedAt?: Timestamp;
+  extensionRequestedAt?: Timestamp;
+  requestedExtensionMinutes?: number;
   status: WorkerJobStatus;
   price: {
     base: number;

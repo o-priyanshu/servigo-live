@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CategoryFilter from "@/components/customer/providers/CategoryFilter";
 import RadiusFilter from "@/components/customer/providers/RadiusFilter";
-import  EmptyState  from "@/components/customer/shared/EmptyState";
+import EmptyState from "@/components/customer/shared/EmptyState";
 import ProviderCard from "@/components/customer/providers/ProviderCard";
-import  LocationGate  from "@/components/customer/location/LocationGate";
-import MapPicker  from "@/components/customer/location/MapPicker";
+import LocationGate from "@/components/customer/location/LocationGate";
+import MapPicker from "@/components/customer/location/MapPicker";
 import type { ServiceCategory } from "@/lib/types/index";
 import type {
   CustomerBookingCardData,
@@ -55,11 +55,45 @@ interface Props {
   locationValidationError: string;
   isSelectedPincodeServiceable: boolean | null;
   handleSelectLocation: () => void;
-  applyLocationSelection: (label: string, coords: { lat: number; lng: number } | null) => Promise<{ serviceable: boolean; pincode: string }>;
+  applyLocationSelection: (
+    label: string,
+    coords: { lat: number; lng: number } | null
+  ) => Promise<{ serviceable: boolean; pincode: string }>;
   resolveLocationLabel: (lat: number, lng: number) => Promise<string>;
   isMapPickerOpen: boolean;
   setIsMapPickerOpen: (v: boolean) => void;
   recentBookings: CustomerBookingCardData[];
+}
+
+interface ProviderResultsProps {
+  providers: CustomerProvider[];
+}
+
+function ProviderResults({ providers }: ProviderResultsProps) {
+  const [visibleCount, setVisibleCount] = useState(8);
+  const visibleProviders = useMemo(() => providers.slice(0, visibleCount), [providers, visibleCount]);
+  const hasMoreProviders = providers.length > visibleCount;
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 lg:grid-cols-2">
+        {visibleProviders.map((provider, index) => (
+          <ProviderCard key={provider.id} provider={provider} index={index} />
+        ))}
+      </div>
+      {hasMoreProviders ? (
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            className="h-10 rounded-xl px-5"
+            onClick={() => setVisibleCount((prev) => prev + 8)}
+          >
+            Load More
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function DashboardHome({
@@ -85,9 +119,7 @@ export default function DashboardHome({
   hasLocationAccess,
   locationLabel,
   userCoords,
-  isValidatingLocation,
   locationValidationError,
-  isSelectedPincodeServiceable,
   handleSelectLocation,
   applyLocationSelection,
   resolveLocationLabel,
@@ -96,15 +128,25 @@ export default function DashboardHome({
   recentBookings,
 }: Props) {
   const areaLabel = formatAreaLabel(locationLabel);
-  const [visibleCount, setVisibleCount] = useState(8);
-  const visibleProviders = useMemo(() => {
-    return providers.slice(0, visibleCount);
-  }, [providers, visibleCount]);
-  const hasMoreProviders = providers.length > visibleCount;
-
-  useEffect(() => {
-    setVisibleCount(8);
-  }, [selectedCategory, selectedRadius, sortBy, onlineOnly, femaleOnly, rating45Plus, verifiedOnly, providers.length]);
+  const actionRequiredBooking = useMemo(
+    () =>
+      recentBookings.find(
+        (booking) =>
+          booking.status === "awaiting_customer_confirmation" ||
+          booking.status === "extension_requested"
+      ) ?? null,
+    [recentBookings]
+  );
+  const providerResultsKey = [
+    selectedCategory,
+    selectedRadius,
+    sortBy,
+    onlineOnly ? "1" : "0",
+    femaleOnly ? "1" : "0",
+    rating45Plus ? "1" : "0",
+    verifiedOnly ? "1" : "0",
+    providers.length,
+  ].join("|");
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-4 sm:px-6 sm:py-6">
@@ -160,6 +202,25 @@ export default function DashboardHome({
         hasLocationAccess={hasLocationAccess}
         onRequestLocation={handleSelectLocation}
       >
+        {actionRequiredBooking ? (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <p className="text-sm font-semibold text-amber-900">Completion request waiting</p>
+            <p className="mt-1 text-sm text-amber-800">
+              Your worker has asked to finish the job or extend time. Please review the booking.
+            </p>
+            <Button
+              className="mt-3 h-9 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+              onClick={() =>
+                window.location.assign(
+                  `/bookings/${actionRequiredBooking.id}?from=${encodeURIComponent("/dashboard?tab=home")}`
+                )
+              }
+            >
+              Open booking
+            </Button>
+          </section>
+        ) : null}
+
         <div className="space-y-3 rounded-2xl border border-border/70 bg-card/85 p-4 shadow-sm">
           <CategoryFilter selected={selectedCategory} onChange={setSelectedCategory} />
           <RadiusFilter selected={selectedRadius} onChange={setSelectedRadius} />
@@ -211,7 +272,15 @@ export default function DashboardHome({
             <div className="grid gap-2 md:grid-cols-3">
               {recentBookings.slice(0, 3).map((booking) => (
                 <div key={booking.id} className="rounded-xl border border-border/70 bg-background p-3">
-                  <p className="truncate text-sm font-medium text-foreground">{booking.providerName}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-medium text-foreground">{booking.providerName}</p>
+                    {booking.status === "awaiting_customer_confirmation" ||
+                    booking.status === "extension_requested" ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Action needed
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="mt-0.5 text-xs capitalize text-muted-foreground">
                     {booking.serviceCategory.replaceAll("_", " ")}
                   </p>
@@ -229,25 +298,8 @@ export default function DashboardHome({
             title="Loading providers..."
             description="Fetching verified professionals near you."
           />
-        ) : visibleProviders.length > 0 ? (
-          <div className="space-y-3">
-            <div className="grid gap-3 lg:grid-cols-2">
-              {visibleProviders.map((provider, index) => (
-                <ProviderCard key={provider.id} provider={provider} index={index} />
-              ))}
-            </div>
-            {hasMoreProviders ? (
-              <div className="flex justify-center">
-                <Button
-                  variant="outline"
-                  className="h-10 rounded-xl px-5"
-                  onClick={() => setVisibleCount((prev) => prev + 8)}
-                >
-                  Load More
-                </Button>
-              </div>
-            ) : null}
-          </div>
+        ) : providers.length > 0 ? (
+          <ProviderResults key={providerResultsKey} providers={providers} />
         ) : (
           <EmptyState
             title="No providers found"

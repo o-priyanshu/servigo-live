@@ -1,6 +1,7 @@
 import { onDocumentWritten } from "firebase-functions/v2/firestore"
 import { initializeApp } from "firebase-admin/app"
 import { getAuth } from "firebase-admin/auth"
+export { onRatingCreated } from "./ratings"
 
 initializeApp()
 

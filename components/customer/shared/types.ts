@@ -12,6 +12,8 @@ export interface CustomerProvider {
   isVerified: boolean;
   rating: number;
   reviewCount: number;
+  averageRating?: number;
+  totalRatings?: number;
   experienceYears: number;
   distanceKm: number;
   serviceRadiusKm?: number;

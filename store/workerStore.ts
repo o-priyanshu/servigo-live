@@ -17,6 +17,8 @@ import {
   declineJob as declineJobService,
   getActiveJobs,
   getPendingJobs,
+  requestJobCompletion as requestJobCompletionService,
+  requestJobExtension as requestJobExtensionService,
   subscribeToPendingJobs as subscribeToPendingJobsService,
   updateJobStatus as updateJobStatusService,
   uploadJobPhoto,
@@ -78,6 +80,8 @@ interface WorkerStore {
     status: WorkerJobStatus,
     data?: Record<string, unknown>
   ) => Promise<void>;
+  requestJobCompletion: (jobId: string, bookingId: string) => Promise<void>;
+  requestJobExtension: (jobId: string, bookingId: string, extraMinutes: number) => Promise<void>;
   fetchActiveJobs: () => Promise<void>;
   fetchEarnings: () => Promise<void>;
   requestWithdrawal: (amount: number, method: string) => Promise<void>;
@@ -222,14 +226,24 @@ export const useWorkerStore = create<WorkerStore>()(
         }
       },
 
-	      updateJobStatus: async (jobId, status, data) => {
-	        await updateJobStatusService(jobId, status, data);
-	        await Promise.all([
-	          get().fetchActiveJobs(),
-	          get().fetchPendingJobs(),
-	          get().fetchEarnings(),
-	        ]);
-	      },
+      updateJobStatus: async (jobId, status, data) => {
+        await updateJobStatusService(jobId, status, data);
+        await Promise.all([
+          get().fetchActiveJobs(),
+          get().fetchPendingJobs(),
+          get().fetchEarnings(),
+        ]);
+      },
+
+      requestJobCompletion: async (jobId, bookingId) => {
+        await requestJobCompletionService(jobId, bookingId);
+        await Promise.all([get().fetchActiveJobs(), get().fetchPendingJobs()]);
+      },
+
+      requestJobExtension: async (jobId, bookingId, extraMinutes) => {
+        await requestJobExtensionService(jobId, bookingId, extraMinutes);
+        await Promise.all([get().fetchActiveJobs(), get().fetchPendingJobs()]);
+      },
 
       fetchActiveJobs: async () => {
         try {
@@ -377,4 +391,3 @@ export const useWorkerStore = create<WorkerStore>()(
     }
   )
 );
-

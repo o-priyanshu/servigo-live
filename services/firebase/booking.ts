@@ -6,7 +6,6 @@ import {
   limit as firestoreLimit,
   onSnapshot,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   type QueryConstraint,
@@ -29,7 +28,14 @@ function asServiceCategory(value: unknown): ServiceCategory {
 
 function asBookingStatus(value: unknown): BookingStatus {
   const status = String(value ?? "pending");
-  if (status === "confirmed" || status === "in_progress" || status === "completed" || status === "cancelled") {
+  if (
+    status === "confirmed" ||
+    status === "in_progress" ||
+    status === "awaiting_customer_confirmation" ||
+    status === "extension_requested" ||
+    status === "completed" ||
+    status === "cancelled"
+  ) {
     return status;
   }
   return "pending";
@@ -60,6 +66,21 @@ function toBooking(id: string, data: Record<string, unknown>): Booking {
     jobPhotos: Array.isArray(data.jobPhotos) ? data.jobPhotos.map((item) => String(item)) : [],
     cancellationReason: typeof data.cancellationReason === "string" ? data.cancellationReason : undefined,
     cancellationCharge: typeof data.cancellationCharge === "number" ? data.cancellationCharge : undefined,
+    serviceDeadlineAt: typeof data.serviceDeadlineAt === "string" ? data.serviceDeadlineAt : undefined,
+    completionRequestedAt:
+      typeof data.completionRequestedAt === "string" ? data.completionRequestedAt : undefined,
+    completionRequestedBy:
+      typeof data.completionRequestedBy === "string" ? data.completionRequestedBy : undefined,
+    completionApprovedAt:
+      typeof data.completionApprovedAt === "string" ? data.completionApprovedAt : undefined,
+    extensionRequestedAt:
+      typeof data.extensionRequestedAt === "string" ? data.extensionRequestedAt : undefined,
+    extensionRequestedBy:
+      typeof data.extensionRequestedBy === "string" ? data.extensionRequestedBy : undefined,
+    requestedExtensionMinutes:
+      typeof data.requestedExtensionMinutes === "number" ? data.requestedExtensionMinutes : undefined,
+    extensionApprovedAt:
+      typeof data.extensionApprovedAt === "string" ? data.extensionApprovedAt : undefined,
     createdAt: toIsoString(data.createdAt),
     updatedAt: toIsoString(data.updatedAt),
     completedAt: toIsoString(data.completedAt),
@@ -127,7 +148,13 @@ export const getCustomerBookings = async (
 };
 
 export const getActiveBooking = async (customerId: string): Promise<Booking | null> => {
-  const rows = await getCustomerBookings(customerId, ["pending", "confirmed", "in_progress"]);
+  const rows = await getCustomerBookings(customerId, [
+    "pending",
+    "confirmed",
+    "in_progress",
+    "awaiting_customer_confirmation",
+    "extension_requested",
+  ]);
   return rows[0] ?? null;
 };
 
@@ -151,66 +178,25 @@ export const completeBooking = async (bookingId: string, rating: number, review:
     throw new Error("Review must be at least 3 characters.");
   }
 
-  const bookingRef = doc(db, "bookings", bookingId);
-  const reviewRef = doc(db, "reviews", bookingId);
-
-  await runTransaction(db, async (tx) => {
-    const bookingSnap = await tx.get(bookingRef);
-    if (!bookingSnap.exists()) {
-      throw new Error("Booking not found.");
-    }
-    const bookingData = bookingSnap.data() as Record<string, unknown>;
-    const currentStatus = asBookingStatus(bookingData.status);
-    if (currentStatus === "cancelled") {
-      throw new Error("Cancelled bookings cannot be completed.");
-    }
-    if (currentStatus === "completed") {
-      throw new Error("Booking is already completed.");
-    }
-
-    const providerId = asString(bookingData.providerId, "");
-    if (!providerId) {
-      throw new Error("Booking is missing worker id.");
-    }
-    const providerRef = doc(db, "providers", providerId);
-    const providerSnap = await tx.get(providerRef);
-    const providerData = providerSnap.exists() ? (providerSnap.data() as Record<string, unknown>) : {};
-
-    const currentCount = asNumber(providerData.reviewCount, 0);
-    const currentRating = asNumber(providerData.rating, 0);
-    const nextCount = currentCount + 1;
-    const nextRating = (currentRating * currentCount + rating) / nextCount;
-
-    tx.set(
-      reviewRef,
-      {
-        bookingId,
-        providerId,
-        customerId: asString(bookingData.customerId, ""),
-        rating,
-        comment: review.trim(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    tx.update(providerRef, {
-      reviewCount: nextCount,
-      rating: Number(nextRating.toFixed(2)),
-      updatedAt: serverTimestamp(),
-    });
-
-    tx.update(bookingRef, {
-      status: "completed",
-      completedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      payment: {
-        status: "captured",
-        holdAmount: asNumber(bookingData.amount, 0),
-        capturedAt: serverTimestamp(),
-      },
-    });
+  const workflowRes = await fetch(`/api/bookings/${bookingId}/workflow`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "approve_completion" }),
   });
+  const workflowData = await workflowRes.json().catch(() => ({}));
+  if (!workflowRes.ok) {
+    throw new Error(typeof workflowData?.error === "string" ? workflowData.error : "Unable to complete booking.");
+  }
+
+  const response = await fetch(`/api/bookings/${bookingId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rating, comment: review.trim() }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(typeof data?.error === "string" ? data.error : "Failed to submit review.");
+  }
 };
 
 export const uploadDisputeEvidence = async (

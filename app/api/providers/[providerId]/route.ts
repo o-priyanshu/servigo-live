@@ -51,8 +51,10 @@ export async function GET(_: Request, context: RouteContext) {
       serviceAreaRadiusKm: Number(provider.serviceRadius ?? provider.serviceAreaRadiusKm ?? 0),
       verificationStatus: provider.verificationStatus ?? "pending",
       isAvailable: provider.isAvailable === true,
-      rating: provider.rating ?? 0,
-      reviewCount: provider.reviewCount ?? 0,
+      rating: Number(provider.averageRating ?? provider.rating ?? 0),
+      reviewCount: Number(provider.totalRatings ?? provider.reviewCount ?? 0),
+      averageRating: Number(provider.averageRating ?? provider.rating ?? 0),
+      totalRatings: Number(provider.totalRatings ?? provider.reviewCount ?? 0),
       location: {
         city: String((provider.location ?? {}).city ?? ""),
       },

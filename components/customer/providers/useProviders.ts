@@ -111,8 +111,10 @@ export function useProviders({
       }),
       isOnline: worker.availability === "online",
       isVerified: worker.isVerified,
-      rating: Number(worker.rating ?? 0),
-      reviewCount: Number(worker.reviewCount ?? 0),
+      rating: Number(worker.averageRating ?? worker.rating ?? 0),
+      reviewCount: Number(worker.totalRatings ?? worker.reviewCount ?? 0),
+      averageRating: Number(worker.averageRating ?? worker.rating ?? 0),
+      totalRatings: Number(worker.totalRatings ?? worker.reviewCount ?? 0),
       experienceYears: Number(worker.yearsOfExperience ?? 0),
       distanceKm: Number(worker.distanceKm ?? 0),
       serviceRadiusKm:

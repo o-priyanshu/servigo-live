@@ -10,6 +10,7 @@ export * from "@/services/firebase/workerEarnings";
 export * from "@/services/firebase/workerLocation";
 export * from "@/services/firebase/workerHub";
 export * from "@/services/firebase/admin";
+export * from "@/services/firebase/rating";
 export {
   getWorkerNotifications,
   subscribeToWorkerNotifications,

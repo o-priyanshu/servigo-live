@@ -7,6 +7,8 @@ const styles: Record<Status, string> = {
   accepted: "bg-blue-100 text-blue-800",
   on_the_way: "bg-cyan-100 text-cyan-800",
   in_progress: "bg-indigo-100 text-indigo-800",
+  waiting_customer: "bg-amber-100 text-amber-800",
+  extension_requested: "bg-orange-100 text-orange-800",
   completed: "bg-emerald-100 text-emerald-800",
   cancelled: "bg-rose-100 text-rose-800",
   pending: "bg-amber-100 text-amber-800",

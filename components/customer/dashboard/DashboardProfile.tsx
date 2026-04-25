@@ -15,11 +15,13 @@ import {
   History as HistoryIcon,
   LogOut,
   MapPin,
+  Star,
   ShieldCheck,
   UserCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import CustomerRatingDisplay from "@/components/rating/CustomerRatingDisplay";
 import type { UserProfile } from "@/lib/types";
 import type { Address, Customer } from "@/services/firebase/types";
 import {
@@ -45,6 +47,7 @@ type ProfileSection =
   | "favorites"
   | "notifications"
   | "history"
+  | "ratings"
   | "subscription"
   | "payments"
   | "referral"
@@ -432,6 +435,12 @@ export default function DashboardProfile({
         icon: HistoryIcon,
         title: "Booking History",
         description: "See completed and cancelled bookings",
+      },
+      {
+        key: "ratings" as const,
+        icon: Star,
+        title: "My Ratings",
+        description: "See feedback workers left on your bookings",
       },
       {
         key: "subscription" as const,
@@ -993,22 +1002,46 @@ export default function DashboardProfile({
                     <p className="font-medium text-foreground">Rs {booking.amount || 0}</p>
                   </div>
                   <div className="mt-2">
-                    <Button
-                      variant="outline"
-                      className="h-8 rounded-md px-3 text-xs"
-                      onClick={() =>
-                        router.push(
-                          `/bookings/${booking.id}?from=${encodeURIComponent(
-                            "/dashboard?tab=profile&section=history"
-                          )}`
-                        )
-                      }
-                    >
-                      View Details
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        className="h-8 rounded-md px-3 text-xs"
+                        onClick={() =>
+                          router.push(
+                            `/bookings/${booking.id}?from=${encodeURIComponent(
+                              "/dashboard?tab=profile&section=history"
+                            )}`
+                          )
+                        }
+                      >
+                        View Details
+                      </Button>
+                      {booking.status === "completed" ? (
+                        <Button
+                          className="h-8 rounded-md bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
+                          onClick={() => router.push(`/reviews/${booking.id}`)}
+                        >
+                          Write Review
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {activeSection === "ratings" ? (
+          <div className="mt-4 rounded-xl border border-border/70 bg-background p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">My Ratings</p>
+              <span className="text-xs text-muted-foreground">
+                Feedback left by workers after completed bookings
+              </span>
+            </div>
+            <div className="mt-3">
+              <CustomerRatingDisplay customerId={user.uid} />
             </div>
           </div>
         ) : null}

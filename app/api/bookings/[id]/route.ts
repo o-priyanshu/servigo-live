@@ -62,6 +62,14 @@ export async function GET(_: Request, { params }: RouteParams) {
         createdAt: booking.createdAt ?? null,
         updatedAt: booking.updatedAt ?? null,
         completedAt: booking.completedAt ?? null,
+        serviceDeadlineAt: booking.serviceDeadlineAt ?? null,
+        completionRequestedAt: booking.completionRequestedAt ?? null,
+        completionRequestedBy: booking.completionRequestedBy ?? null,
+        completionApprovedAt: booking.completionApprovedAt ?? null,
+        extensionRequestedAt: booking.extensionRequestedAt ?? null,
+        extensionRequestedBy: booking.extensionRequestedBy ?? null,
+        requestedExtensionMinutes: booking.requestedExtensionMinutes ?? null,
+        extensionApprovedAt: booking.extensionApprovedAt ?? null,
       },
     });
   } catch (error: unknown) {

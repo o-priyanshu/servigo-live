@@ -13,9 +13,38 @@ interface RazorpayPaymentProps {
   onError: (error: string) => void;
 }
 
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+}
+
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  order_id: string;
+  name: string;
+  description: string;
+  handler: (response: RazorpayResponse) => Promise<void>;
+  prefill: {
+    name: string;
+    email: string;
+    contact: string;
+  };
+  theme: {
+    color: string;
+  };
+  modal: {
+    ondismiss: () => void;
+  };
+}
+
+interface RazorpayInstance {
+  open: () => void;
+}
+
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay: new (options: RazorpayOptions) => RazorpayInstance;
   }
 }
 
@@ -26,7 +55,6 @@ export default function RazorpayPayment({ bookingId, amount, onSuccess, onError 
     setIsLoading(true);
 
     try {
-      // Create payment order
       const response = await fetch("/api/payments/create-order", {
         method: "POST",
         headers: {
@@ -42,36 +70,34 @@ export default function RazorpayPayment({ bookingId, amount, onSuccess, onError 
 
       const { orderId, amount: orderAmount, currency, key } = await response.json();
 
-      // Initialize Razorpay
-      const options = {
+      const options: RazorpayOptions = {
         key,
-        amount: orderAmount * 100, // Amount in paisa
+        amount: orderAmount * 100,
         currency,
         order_id: orderId,
         name: "ServiGo",
         description: "Booking Fee Payment",
-        handler: async function (response: any) {
-          // Payment successful
+        handler: async (paymentResponse) => {
           try {
             await updateDoc(doc(db, "bookings", bookingId), {
               paymentStatus: "paid",
-              paymentId: response.razorpay_payment_id,
+              paymentId: paymentResponse.razorpay_payment_id,
               updatedAt: new Date(),
             });
-            console.log('Payment status updated in Firestore');
+            console.log("Payment status updated in Firestore");
             onSuccess();
           } catch (error) {
-            console.error('Failed to update payment status:', error);
-            onError('Payment verification failed');
+            console.error("Failed to update payment status:", error);
+            onError("Payment verification failed");
           }
         },
         prefill: {
-          name: "", // Will be filled from user profile if available
+          name: "",
           email: "",
           contact: "",
         },
         theme: {
-          color: "#059669", // emerald-600
+          color: "#059669",
         },
         modal: {
           ondismiss: function () {
@@ -82,7 +108,6 @@ export default function RazorpayPayment({ bookingId, amount, onSuccess, onError 
 
       const rzp = new window.Razorpay(options);
       rzp.open();
-
     } catch (error) {
       console.error("Payment error:", error);
       onError(error instanceof Error ? error.message : "Payment failed");
@@ -94,7 +119,7 @@ export default function RazorpayPayment({ bookingId, amount, onSuccess, onError 
     <Button
       onClick={handlePayment}
       disabled={isLoading}
-      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+      className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
       size="lg"
     >
       {isLoading ? (

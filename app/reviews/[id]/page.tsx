@@ -1,15 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Star } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import StarInput from "@/components/rating/StarInput";
+import CriteriaSlider from "@/components/rating/CriteriaSlider";
+import {
+  NEGATIVE_WORKER_TAGS,
+  POSITIVE_WORKER_TAGS,
+} from "@/constants/ratingTags";
 import { useAuth } from "@/context/AuthContext";
-import { raiseDispute, uploadDisputeEvidence } from "@/services/firebase/booking";
 
 interface BookingMeta {
   providerId: string;
+  providerName: string;
+  providerPhoto: string;
   serviceCategory: string;
   amount: number;
   address: string;
@@ -28,14 +36,26 @@ function asIso(value: unknown): string {
   return "";
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "W";
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
 export default function ReviewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
   const bookingId = params?.id ?? "";
 
-  const [rating, setRating] = useState(5);
+  const [overallRating, setOverallRating] = useState(5);
+  const [punctuality, setPunctuality] = useState(5);
+  const [quality, setQuality] = useState(5);
+  const [behavior, setBehavior] = useState(5);
+  const [cleanliness, setCleanliness] = useState(5);
+  const [valueForMoney, setValueForMoney] = useState(5);
   const [comment, setComment] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -48,6 +68,11 @@ export default function ReviewPage() {
   const [disputeMessage, setDisputeMessage] = useState("");
   const [remainingMs, setRemainingMs] = useState(0);
 
+  const tagOptions = useMemo(
+    () => (overallRating >= 4 ? POSITIVE_WORKER_TAGS : NEGATIVE_WORKER_TAGS),
+    [overallRating]
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -56,6 +81,7 @@ export default function ReviewPage() {
         const res = await fetch(`/api/bookings/${bookingId}/review`, { cache: "no-store" });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error ?? "Failed to load review");
+
         if (!cancelled && data.review) {
           setExisting({ rating: Number(data.review.rating ?? 0), comment: String(data.review.comment ?? "") });
         }
@@ -65,6 +91,8 @@ export default function ReviewPage() {
         if (bookingRes.ok && !cancelled && bookingData.booking) {
           setBooking({
             providerId: String(bookingData.booking.providerId ?? ""),
+            providerName: String(bookingData.booking.providerName ?? "Provider"),
+            providerPhoto: String(bookingData.booking.providerPhoto ?? ""),
             serviceCategory: String(bookingData.booking.serviceCategory ?? ""),
             amount: Number(bookingData.booking.amount ?? 0),
             address: String(bookingData.booking.address ?? ""),
@@ -99,6 +127,13 @@ export default function ReviewPage() {
     return () => window.clearInterval(timer);
   }, [booking]);
 
+  useEffect(() => {
+    if (!booking) return;
+    if (existing) return;
+    if (booking.status !== "completed") return;
+    setSelectedTags([]);
+  }, [booking, existing]);
+
   async function handleSubmit() {
     try {
       setSubmitting(true);
@@ -106,7 +141,20 @@ export default function ReviewPage() {
       const res = await fetch(`/api/bookings/${bookingId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, comment }),
+        body: JSON.stringify({
+          rating: overallRating,
+          overallRating,
+          comment,
+          reviewText: comment,
+          criteriaRatings: {
+            punctuality,
+            quality,
+            behavior,
+            cleanliness,
+            valueForMoney,
+          },
+          tags: selectedTags,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "Failed to submit review");
@@ -136,6 +184,7 @@ export default function ReviewPage() {
     try {
       setDisputeSubmitting(true);
       setDisputeMessage("");
+      const { raiseDispute, uploadDisputeEvidence } = await import("@/services/firebase/booking");
       const evidenceUrls: string[] = [];
       for (const file of disputeFiles.slice(0, 4)) {
         const url = await uploadDisputeEvidence(bookingId, file, user.uid);
@@ -177,74 +226,130 @@ export default function ReviewPage() {
     receiptWindow.print();
   }
 
+  function toggleTag(tag: string) {
+    setSelectedTags((current) =>
+      current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]
+    );
+  }
+
   const disputeWindowLabel = `${Math.floor(remainingMs / (1000 * 60 * 60))}h ${Math.floor(
     (remainingMs % (1000 * 60 * 60)) / (1000 * 60)
   )}m`;
 
   return (
     <main className="min-h-screen bg-background px-4 py-10">
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className="mx-auto max-w-4xl space-y-4">
         <section className="rounded-2xl border border-border bg-card p-6">
           <h1 className="text-2xl font-bold text-foreground">Write Review</h1>
           <p className="mt-1 text-sm text-muted-foreground">Booking ID: {bookingId}</p>
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-6">
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Loading review state...</p>
-          ) : existing ? (
-            <div>
-              <p className="text-sm text-muted-foreground">You already submitted a review.</p>
-              <p className="mt-2 text-base font-medium text-foreground">Rating: {existing.rating}/5</p>
-              <p className="mt-1 text-sm text-muted-foreground">{existing.comment}</p>
-              <Link href={`/bookings/${bookingId}`} className="mt-3 inline-flex text-sm font-medium text-emerald-700">
-                Back to booking
-              </Link>
-            </div>
-          ) : (
-            <>
+        <section className="rounded-2xl border border-border bg-card p-0 shadow-sm">
+          <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+            <div className="flex items-center gap-3">
+              {booking?.providerPhoto ? (
+                <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-border/70">
+                  <Image src={booking.providerPhoto} alt={booking.providerName} fill sizes="48px" className="object-cover" />
+                </div>
+              ) : (
+                <div className="grid h-12 w-12 place-items-center rounded-xl border border-border/70 bg-muted text-sm font-semibold text-muted-foreground">
+                  {getInitials(booking?.providerName ?? "Worker")}
+                </div>
+              )}
               <div>
-                <p className="text-sm font-medium text-foreground">Rating</p>
-                <div className="mt-2 flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setRating(value)}
-                      className="rounded-md p-1"
-                    >
-                      <Star
-                        size={22}
-                        className={
-                          value <= rating
-                            ? "fill-amber-400 text-amber-400"
-                            : "text-muted-foreground"
-                        }
-                      />
-                    </button>
-                  ))}
+                <h2 className="text-lg font-semibold text-foreground">
+                  Rate {booking?.providerName ?? "Worker"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {booking?.serviceCategory ? booking.serviceCategory.replaceAll("_", " ") : "Service"}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/bookings/${bookingId}`}
+              className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Close review page"
+            >
+              <X size={18} />
+            </Link>
+          </div>
+
+          <div className="max-h-[80vh] overflow-y-auto px-5 py-4">
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Loading review state...</p>
+            ) : existing ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">You already submitted a review.</p>
+                <p className="text-base font-medium text-foreground">Rating: {existing.rating}/5</p>
+                <p className="text-sm text-muted-foreground">{existing.comment}</p>
+                <Link href={`/bookings/${bookingId}`} className="inline-flex text-sm font-medium text-emerald-700">
+                  Back to booking
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <StarInput value={overallRating} onChange={setOverallRating} size="lg" labels />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <CriteriaSlider label="Punctuality" value={punctuality} onChange={setPunctuality} />
+                  <CriteriaSlider label="Quality" value={quality} onChange={setQuality} />
+                  <CriteriaSlider label="Behavior" value={behavior} onChange={setBehavior} />
+                  <CriteriaSlider label="Cleanliness" value={cleanliness} onChange={setCleanliness} />
+                  <CriteriaSlider
+                    label="Value for Money"
+                    value={valueForMoney}
+                    onChange={setValueForMoney}
+                    description="How fair was the final price?"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-foreground">Write a review</label>
+                  <textarea
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    placeholder="Share what went well..."
+                  />
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium text-foreground">Tags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {tagOptions.map((tag) => {
+                      const active = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => toggleTag(tag)}
+                          className={`rounded-full border px-3 py-1 text-sm transition ${
+                            active
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                              : "border-border bg-background text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+
+                <div className="flex items-center justify-end gap-3 border-t border-border pt-4">
+                  <Button variant="outline" onClick={() => router.push(`/bookings/${bookingId}`)} disabled={submitting}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSubmit} disabled={submitting || overallRating < 1}>
+                    {submitting ? "Submitting..." : "Submit Rating"}
+                  </Button>
                 </div>
               </div>
-              <div className="mt-4">
-                <p className="text-sm font-medium text-foreground">Comment</p>
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  rows={4}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  placeholder="Share your experience..."
-                />
-              </div>
-              {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
-              <Button
-                onClick={handleSubmit}
-                disabled={submitting || comment.trim().length < 3}
-                className="mt-4"
-              >
-                {submitting ? "Submitting..." : "Submit Review"}
-              </Button>
-            </>
-          )}
+            )}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-6">

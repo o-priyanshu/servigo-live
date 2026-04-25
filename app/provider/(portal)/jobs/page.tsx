@@ -63,6 +63,10 @@ function mapWorkerJobToUi(job: WorkerJob): Job {
         ? "in_progress"
         : job.status === "on_way" || job.status === "arrived"
         ? "on_the_way"
+        : job.status === "completion_requested"
+        ? "waiting_customer"
+        : job.status === "extension_requested"
+        ? "extension_requested"
         : job.status === "completed"
         ? "completed"
         : job.status === "cancelled"
@@ -91,6 +95,7 @@ export default function ProviderJobsPage() {
   const acceptJob = useWorkerStore((state) => state.acceptJob);
   const declineJob = useWorkerStore((state) => state.declineJob);
   const updateJobStatus = useWorkerStore((state) => state.updateJobStatus);
+  const requestJobCompletion = useWorkerStore((state) => state.requestJobCompletion);
 
   const [historyJobs, setHistoryJobs] = useState<WorkerJob[]>([]);
 
@@ -229,12 +234,15 @@ export default function ProviderJobsPage() {
   }
 
   async function handleCompleteJob(id: string) {
-    const source = activeJobs.find((entry) => entry.id === id);
-    await updateJobStatus(id, "completed", {
-      bookingId: source?.bookingId,
-      workerId: source?.workerId,
-    });
-    await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    try {
+      const source = activeJobs.find((entry) => entry.id === id);
+      await requestJobCompletion(id, source?.bookingId ?? "");
+      toast.success("✓ Completion request sent to customer");
+      await Promise.all([refreshHistory(), fetchPendingJobs(), fetchActiveJobs()]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Failed to request completion";
+      toast.error(`Failed: ${errorMsg}`);
+    }
   }
 
   function setTab(tab: JobsTab) {
@@ -297,4 +305,3 @@ export default function ProviderJobsPage() {
     </div>
   );
 }
-

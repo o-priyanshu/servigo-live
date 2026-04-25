@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ServiceCategory } from "@/lib/types/index";
 import type { CustomerBookingCardData } from "@/components/customer/shared/types";
 
-type BookingViewFilter = "pending" | "confirmed" | "cancelled";
+type BookingViewFilter = "pending" | "confirmed" | "completed" | "cancelled";
 
 interface ApiBooking {
   id: string;
@@ -83,7 +83,16 @@ export function useBookings(userId: string | undefined, bookingFilter: BookingVi
   const filteredBookings = useMemo(() => {
     if (bookingFilter === "pending") return bookings.filter((b) => b.status === "pending");
     if (bookingFilter === "confirmed") {
-      return bookings.filter((b) => b.status === "confirmed" || b.status === "in_progress");
+      return bookings.filter(
+        (b) =>
+          b.status === "confirmed" ||
+          b.status === "in_progress" ||
+          b.status === "awaiting_customer_confirmation" ||
+          b.status === "extension_requested"
+      );
+    }
+    if (bookingFilter === "completed") {
+      return bookings.filter((b) => b.status === "completed");
     }
     return bookings.filter((b) => b.status === "cancelled");
   }, [bookings, bookingFilter]);

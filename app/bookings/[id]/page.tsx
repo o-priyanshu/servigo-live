@@ -10,6 +10,7 @@ import { normalizeProviderDisplayName } from "@/lib/server/provider-display";
 import { getProviderProfileImage } from "@/lib/profile-image";
 import CustomerPageNav from "@/components/customer/shared/CustomerPageNav";
 import BookingLiveTracker from "@/components/customer/booking/BookingLiveTracker";
+import BookingResolutionPanel from "@/components/customer/booking/BookingResolutionPanel";
 
 interface BookingDetailPageProps {
   params: Promise<{ id: string }>;
@@ -69,6 +70,8 @@ export default async function BookingDetailPage({ params, searchParams }: Bookin
   const status = String(booking.status ?? "pending");
   const address = String(booking.address ?? "Address not provided");
   const category = String(booking.serviceCategory ?? "service");
+  const serviceDeadlineAt = String(booking.serviceDeadlineAt ?? "");
+  const requestedExtensionMinutes = Number(booking.requestedExtensionMinutes ?? 0) || null;
   if (providerId) {
     providerName = normalizeProviderDisplayName(
       providerName,
@@ -142,6 +145,20 @@ export default async function BookingDetailPage({ params, searchParams }: Bookin
             </p>
           </div>
           <CancelBookingButton bookingId={id} status={status} scheduledAt={scheduledAt} className="mt-4" />
+          {status === "completed" ? (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-semibold text-emerald-900">Job completed</p>
+              <p className="mt-1 text-sm text-emerald-800">You can rate and review the worker now.</p>
+              <div className="mt-3">
+                <Link
+                  href={`/reviews/${id}`}
+                  className="inline-flex h-10 items-center rounded-md bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700"
+                >
+                  Write Review
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         {providerId ? (
@@ -152,6 +169,13 @@ export default async function BookingDetailPage({ params, searchParams }: Bookin
             initialStatus={status}
           />
         ) : null}
+
+        <BookingResolutionPanel
+          bookingId={id}
+          status={status}
+          requestedExtensionMinutes={requestedExtensionMinutes}
+          serviceDeadlineAt={serviceDeadlineAt || null}
+        />
       </div>
     </main>
   );

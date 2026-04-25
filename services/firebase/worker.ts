@@ -34,6 +34,8 @@ type ProviderApiListItem = {
   isVerified: boolean;
   rating: number;
   reviewCount: number;
+  averageRating?: number;
+  totalRatings?: number;
   experienceYears: number;
   distanceKm: number;
   serviceRadiusKm: number;
@@ -54,6 +56,8 @@ type ProviderApiDetail = {
   isAvailable?: boolean;
   rating?: number;
   reviewCount?: number;
+  averageRating?: number;
+  totalRatings?: number;
   location?: { city?: string } | null;
 };
 
@@ -109,8 +113,10 @@ export const getWorkersNearby = async (
       photo: provider.photo,
       serviceCategory: provider.category,
       gender: "other" as const,
-      rating: Number(provider.rating ?? 0),
-      reviewCount: Number(provider.reviewCount ?? 0),
+      rating: Number(provider.averageRating ?? provider.rating ?? 0),
+      reviewCount: Number(provider.totalRatings ?? provider.reviewCount ?? 0),
+      averageRating: Number(provider.averageRating ?? provider.rating ?? 0),
+      totalRatings: Number(provider.totalRatings ?? provider.reviewCount ?? 0),
       yearsOfExperience: Number(provider.experienceYears ?? 0),
       serviceRadius: Number(provider.serviceRadiusKm ?? 0),
       baseRate: Number(provider.hourlyRate ?? 450),
@@ -175,8 +181,10 @@ export const getWorkerById = async (workerId: string): Promise<Worker> => {
     photo: payload.photo,
     serviceCategory: payload.serviceCategory,
     gender: "other",
-    rating: Number(payload.rating ?? 0),
-    reviewCount: Number(payload.reviewCount ?? 0),
+    rating: Number(payload.averageRating ?? payload.rating ?? 0),
+    reviewCount: Number(payload.totalRatings ?? payload.reviewCount ?? 0),
+    averageRating: Number(payload.averageRating ?? payload.rating ?? 0),
+    totalRatings: Number(payload.totalRatings ?? payload.reviewCount ?? 0),
     yearsOfExperience: Number(payload.yearsOfExperience ?? 0),
     serviceRadius: Number(payload.serviceAreaRadiusKm ?? 0),
     baseRate: 450,
