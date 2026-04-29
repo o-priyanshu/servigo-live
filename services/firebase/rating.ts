@@ -7,8 +7,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
   where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -20,7 +18,6 @@ import type {
   RatingStatus,
   RatingTargetType,
   WorkerRatingData,
-  Booking,
 } from "@/services/firebase/types";
 import {
   calculateCriteriaAverages,
@@ -56,10 +53,6 @@ function asRatingStatus(value: unknown): RatingStatus {
   return value === "auto_generated" || value === "removed" ? value : "submitted";
 }
 
-function normalizeTags(tags: string[]): string[] {
-  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 8);
-}
-
 function normalizeCriteriaRatings(
   data: Record<string, unknown>,
   ratedType: RatingTargetType
@@ -84,16 +77,9 @@ function normalizeCriteriaRatings(
   };
 }
 
-function validateCriteria(criteria: Record<string, unknown>): void {
-  for (const [key, value] of Object.entries(criteria)) {
-    if (!isValidRatingValue(value)) {
-      throw new Error(`Criteria rating "${key}" must be an integer between 1 and 5.`);
-    }
-  }
-}
-
 function toRating(id: string, data: Record<string, unknown>): Rating {
-  const ratedType = data.ratedType === "customer" || data.ratedType === "worker" ? data.ratedType : "worker";
+  const ratedType =
+    data.ratedType === "customer" || data.ratedType === "worker" ? data.ratedType : "worker";
   return {
     id,
     bookingId: String(data.bookingId ?? ""),
@@ -111,7 +97,10 @@ function toRating(id: string, data: Record<string, unknown>): Rating {
   };
 }
 
-async function fetchRatingsByTarget(targetId: string, targetType: RatingTargetType): Promise<Rating[]> {
+async function fetchRatingsByTarget(
+  targetId: string,
+  targetType: RatingTargetType
+): Promise<Rating[]> {
   if (!targetId) return [];
   const snap = await getDocs(
     query(
@@ -124,81 +113,52 @@ async function fetchRatingsByTarget(targetId: string, targetType: RatingTargetTy
   return snap.docs
     .map((entry) => toRating(entry.id, entry.data() as Record<string, unknown>))
     .sort((a, b) => {
-      const left = a.createdAt && typeof a.createdAt === "object" && "toMillis" in a.createdAt
-        ? (a.createdAt as { toMillis: () => number }).toMillis()
-        : 0;
-      const right = b.createdAt && typeof b.createdAt === "object" && "toMillis" in b.createdAt
-        ? (b.createdAt as { toMillis: () => number }).toMillis()
-        : 0;
+      const left =
+        a.createdAt && typeof a.createdAt === "object" && "toMillis" in a.createdAt
+          ? (a.createdAt as { toMillis: () => number }).toMillis()
+          : 0;
+      const right =
+        b.createdAt && typeof b.createdAt === "object" && "toMillis" in b.createdAt
+          ? (b.createdAt as { toMillis: () => number }).toMillis()
+          : 0;
       return right - left;
     });
 }
 
-async function getBookingOrThrow(bookingId: string): Promise<Booking> {
-  const snap = await getDoc(doc(db, "bookings", bookingId));
-  if (!snap.exists()) throw new Error("Booking not found.");
-  return snap.data() as Booking;
-}
-
+// ✅ submitRating now goes through API instead of direct Firestore
 export async function submitRating(data: SubmitRatingData): Promise<void> {
   const currentUserId = auth.currentUser?.uid ?? "";
   if (!currentUserId) throw new Error("You must be signed in to submit a rating.");
   if (!data.bookingId.trim()) throw new Error("Booking id is required.");
   if (!data.ratedId.trim()) throw new Error("Rated user id is required.");
-  if (!["customer", "worker"].includes(data.ratedType)) throw new Error("Rated type is invalid.");
+  if (!["customer", "worker"].includes(data.ratedType)) {
+    throw new Error("Rated type is invalid.");
+  }
   if (!isValidRatingValue(data.overallRating)) {
     throw new Error("Overall rating must be an integer between 1 and 5.");
   }
-  validateCriteria(data.criteriaRatings as Record<string, unknown>);
-  if (data.reviewText.trim().length > 2000) {
-    throw new Error("Review text must be 2000 characters or fewer.");
-  }
 
-  const booking = await getBookingOrThrow(data.bookingId);
-  if (String(booking.status ?? "") !== "completed") {
-    throw new Error("Ratings can only be created for completed bookings.");
-  }
+  const res = await fetch(`/api/bookings/${data.bookingId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      overallRating: data.overallRating,
+      reviewText: data.reviewText,
+      criteriaRatings: data.criteriaRatings,
+      tags: data.tags,
+    }),
+  });
 
-  const bookingCustomerId = String(booking.customerId ?? "");
-  const bookingWorkerId = String(booking.providerId ?? "");
-  const isCustomerRater = currentUserId === bookingCustomerId;
-  const isWorkerRater = currentUserId === bookingWorkerId;
-  if (!isCustomerRater && !isWorkerRater) {
-    throw new Error("You can only rate a booking you participated in.");
-  }
-
-  const raterType: RatingTargetType = isCustomerRater ? "customer" : "worker";
-  const expectedRatedType: RatingTargetType = raterType === "customer" ? "worker" : "customer";
-  const expectedRatedId = expectedRatedType === "worker" ? bookingWorkerId : bookingCustomerId;
-
-  if (data.ratedType !== expectedRatedType) {
-    throw new Error("Rated type does not match the booking participant.");
-  }
-  if (data.ratedId !== expectedRatedId) {
-    throw new Error("Rated user does not match the booking participant.");
-  }
-  const ref = doc(db, "ratings", ratingDocId(data.bookingId, currentUserId));
-  const existing = await getDoc(ref);
-  if (existing.exists()) {
+  if (res.status === 409) {
     throw new Error("A rating already exists for this booking.");
   }
-
-  const payload: Record<string, unknown> = {
-    bookingId: data.bookingId,
-    raterId: currentUserId,
-    raterType,
-    ratedId: data.ratedId,
-    ratedType: data.ratedType,
-    overallRating: data.overallRating,
-    criteriaRatings: data.criteriaRatings,
-    reviewText: data.reviewText.trim(),
-    tags: normalizeTags(data.tags),
-    status: "submitted",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
-
-  await setDoc(ref, payload, { merge: false });
+  if (res.status === 403) {
+    throw new Error("You are not allowed to rate this booking.");
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? "Failed to submit rating.");
+  }
 }
 
 export async function getPendingRatings(
@@ -223,7 +183,9 @@ export async function getPendingRatings(
       const ratingSnap = await getDoc(ratingRef);
       if (ratingSnap.exists()) return null;
       const booking = bookingSnap.data() as Record<string, unknown>;
-      const ratedId = String(ratedType === "worker" ? booking.providerId ?? "" : booking.customerId ?? "");
+      const ratedId = String(
+        ratedType === "worker" ? (booking.providerId ?? "") : (booking.customerId ?? "")
+      );
       return {
         bookingId: bookingSnap.id,
         ratedId,
@@ -291,7 +253,9 @@ export async function getWorkerRatingAggregate(workerId: string): Promise<Worker
   };
 }
 
-export async function getCustomerRatingAggregate(customerId: string): Promise<CustomerRatingData> {
+export async function getCustomerRatingAggregate(
+  customerId: string
+): Promise<CustomerRatingData> {
   const ratings = await fetchRatingsByTarget(customerId, "customer");
   const criteriaAverages = calculateCriteriaAverages(ratings) as Partial<{
     behavior: number;
@@ -311,7 +275,10 @@ export async function getCustomerRatingAggregate(customerId: string): Promise<Cu
   };
 }
 
-export async function hasUserRatedBooking(bookingId: string, userId: string): Promise<boolean> {
+export async function hasUserRatedBooking(
+  bookingId: string,
+  userId: string
+): Promise<boolean> {
   if (!bookingId || !userId) return false;
   const snap = await getDoc(doc(db, "ratings", ratingDocId(bookingId, userId)));
   return snap.exists();
@@ -329,6 +296,8 @@ export const subscribeToWorkerRatings = (
     firestoreLimit(20)
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((entry) => toRating(entry.id, entry.data() as Record<string, unknown>)));
+    callback(
+      snap.docs.map((entry) => toRating(entry.id, entry.data() as Record<string, unknown>))
+    );
   });
 };

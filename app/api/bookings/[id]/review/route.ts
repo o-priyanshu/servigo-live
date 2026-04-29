@@ -62,9 +62,14 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const booking = bookingSnap.data() ?? {};
-    if (booking.customerId !== sessionUser.uid) {
+    const isCustomer = booking.customerId === sessionUser.uid;
+    const isProvider = booking.providerId === sessionUser.uid;
+
+    // ✅ Both customer and provider can submit a rating
+    if (!isCustomer && !isProvider) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
     if (booking.status !== "completed") {
       return NextResponse.json(
         { error: "Review allowed only for completed bookings" },
@@ -74,21 +79,21 @@ export async function POST(request: Request, context: RouteContext) {
 
     const body = await request.json().catch(() => null);
     const rating = Number(body?.rating ?? body?.overallRating);
-    const comment = String(body?.comment ?? body?.reviewText ?? "").trim();
+    const reviewText = String(body?.comment ?? body?.reviewText ?? "").trim();
+    const tags = Array.isArray(body?.tags)
+      ? body.tags.filter((item: unknown) => typeof item === "string")
+      : [];
     const criteriaRatings =
-      (body?.criteriaRatings && typeof body.criteriaRatings === "object" ? body.criteriaRatings : null) ?? {
-        punctuality: rating,
-        quality: rating,
-        behavior: rating,
-        cleanliness: rating,
-        valueForMoney: rating,
-      };
-    const tags = Array.isArray(body?.tags) ? body.tags.filter((item: unknown) => typeof item === "string") : [];
+      body?.criteriaRatings && typeof body.criteriaRatings === "object"
+        ? body.criteriaRatings
+        : null;
 
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return NextResponse.json({ error: "Rating must be between 1 and 5" }, { status: 400 });
     }
-    if (comment.length < 3 || comment.length > 2000) {
+
+    // ✅ Worker review text is optional, customer review text is required
+    if (isCustomer && (reviewText.length < 3 || reviewText.length > 2000)) {
       return NextResponse.json({ error: "Comment length is invalid" }, { status: 400 });
     }
 
@@ -98,22 +103,38 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Review already submitted" }, { status: 409 });
     }
 
+    // ✅ Determine rater/rated based on who is submitting
+    const raterType = isCustomer ? "customer" : "worker";
+    const ratedType = isCustomer ? "worker" : "customer";
+    const ratedId = isCustomer
+      ? String(booking.providerId ?? "")
+      : String(booking.customerId ?? "");
+
+    // ✅ Build criteria based on rater type
+    const normalizedCriteria = isCustomer
+      ? {
+          punctuality: Number((criteriaRatings as Record<string, unknown>)?.punctuality ?? rating),
+          quality: Number((criteriaRatings as Record<string, unknown>)?.quality ?? rating),
+          behavior: Number((criteriaRatings as Record<string, unknown>)?.behavior ?? rating),
+          cleanliness: Number((criteriaRatings as Record<string, unknown>)?.cleanliness ?? rating),
+          valueForMoney: Number((criteriaRatings as Record<string, unknown>)?.valueForMoney ?? rating),
+        }
+      : {
+          behavior: Number((criteriaRatings as Record<string, unknown>)?.behavior ?? rating),
+          paymentPromptness: Number((criteriaRatings as Record<string, unknown>)?.paymentPromptness ?? rating),
+          accessibility: Number((criteriaRatings as Record<string, unknown>)?.accessibility ?? rating),
+          communication: Number((criteriaRatings as Record<string, unknown>)?.communication ?? rating),
+        };
+
     const ratingPayload = {
       bookingId: id,
       raterId: sessionUser.uid,
-      raterType: "customer",
-      ratedId: String(booking.providerId ?? ""),
-      ratedType: "worker",
+      raterType,
+      ratedId,
+      ratedType,
       overallRating: rating,
-      criteriaRatings: {
-        punctuality: Number((criteriaRatings as Record<string, unknown>).punctuality ?? rating),
-        quality: Number((criteriaRatings as Record<string, unknown>).quality ?? rating),
-        behavior: Number((criteriaRatings as Record<string, unknown>).behavior ?? rating),
-        cleanliness: Number((criteriaRatings as Record<string, unknown>).cleanliness ?? rating),
-        valueForMoney: Number((criteriaRatings as Record<string, unknown>).valueForMoney ?? rating),
-      },
-      comment,
-      reviewText: comment,
+      criteriaRatings: normalizedCriteria,
+      reviewText,
       tags,
       status: "submitted",
       createdAt: FieldValue.serverTimestamp(),
@@ -121,20 +142,24 @@ export async function POST(request: Request, context: RouteContext) {
     };
 
     await adminDb.runTransaction(async (tx) => {
-      const legacyReviewRef = adminDb.collection("reviews").doc(id);
       tx.set(ratingRef, ratingPayload);
-      tx.set(
-        legacyReviewRef,
-        {
-          bookingId: id,
-          providerId: booking.providerId,
-          customerId: sessionUser.uid,
-          rating,
-          comment,
-          createdAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+
+      // ✅ Only write legacy review doc for customer ratings
+      if (isCustomer) {
+        const legacyReviewRef = adminDb.collection("reviews").doc(id);
+        tx.set(
+          legacyReviewRef,
+          {
+            bookingId: id,
+            providerId: booking.providerId,
+            customerId: sessionUser.uid,
+            rating,
+            comment: reviewText,
+            createdAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
     });
 
     return NextResponse.json({ ok: true }, { status: 201 });
