@@ -52,7 +52,6 @@ function FaqCard({
     <button
       type="button"
       onClick={onToggle}
-      suppressHydrationWarning
       className={cn(
         "group flex w-full flex-col rounded-2xl border border-border bg-card p-6 text-left transition-colors",
         isOpen && "border-foreground/20 bg-foreground text-background"
