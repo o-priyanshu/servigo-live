@@ -93,6 +93,7 @@ export function Navbar() {
             type="button"
             className="lg:hidden p-2 -mr-2 text-foreground"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            suppressHydrationWarning
           >
             {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
