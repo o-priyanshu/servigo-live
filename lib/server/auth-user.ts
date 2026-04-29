@@ -112,8 +112,11 @@ export const upsertUserFromIdToken = async ({
   let isProfileComplete = Boolean(current.isProfileComplete);
 
   if (roleIntent === "provider" && role === "user") {
-    role = "provider";
-    isProfileComplete = false;
+    throw new Error("ROLE_CONFLICT: This email is already registered as a customer. Please use a different email to register as a provider.");
+  }
+
+  if (roleIntent === "user" && role === "provider") {
+    throw new Error("ROLE_CONFLICT: This email is already registered as a provider. Please use a different email to sign up as a customer.");
   }
   if (role === "provider" && !isProfileComplete) {
     const providerSnap = await adminDb.collection("providers").doc(decoded.uid).get();
@@ -130,8 +133,8 @@ export const upsertUserFromIdToken = async ({
   const status = isBlocked
     ? "blocked"
     : userRecord.emailVerified
-    ? "active"
-    : "pending_verification";
+      ? "active"
+      : "pending_verification";
 
   const sharedPayload = {
     uid: decoded.uid,

@@ -76,12 +76,13 @@ export async function GET(request: Request) {
     const sortBy = parseSortBy(searchParams.get("sortBy"));
     const search = (searchParams.get("search") ?? "").trim().toLowerCase();
 
-    if (process.env.NODE_ENV !== "production") {
-      await ensureSeedProviders();
-      if (lat !== null && lng !== null) {
-        await ensureLocalSeedProviders(lat, lng);
-      }
-    }
+    // dummy data
+    // if (process.env.NODE_ENV !== "production") {
+    //   await ensureSeedProviders();
+    //   if (lat !== null && lng !== null) {
+    //     await ensureLocalSeedProviders(lat, lng);
+    //   }
+    // }
 
     const providersSnap = await adminDb
       .collection("providers")

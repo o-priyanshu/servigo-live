@@ -13,6 +13,7 @@ interface AdminTokenPayload {
 }
 
 const encoder = new TextEncoder();
+
 function getAdminSecret(): Uint8Array | null {
   const raw = process.env.ADMIN_JWT_SECRET?.trim();
   if (!raw || raw.length < 32) {

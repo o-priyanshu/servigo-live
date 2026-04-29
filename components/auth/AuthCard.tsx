@@ -123,6 +123,12 @@ export function AuthCard({
         await signOut(auth);
         throw new Error("Your account has been suspended. Please contact support.");
       }
+      if (res.status === 409) {
+        await signOut(auth);
+        const payload = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error ?? "This email is already registered with a different role.");
+      }
+
       if (!res.ok) {
         throw new Error("Failed to initialize your account. Please try again.");
       }
@@ -263,6 +269,10 @@ export function AuthCard({
         "code" in error &&
         (error as { code: string }).code === "auth/popup-closed-by-user"
       ) {
+        return;
+      }
+      if (error instanceof Error) {
+        setErrorMessage(error.message);
         return;
       }
       setErrorMessage(getFirebaseErrorMessage(error));

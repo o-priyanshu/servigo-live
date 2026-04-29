@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { upsertUserFromIdToken } from "@/lib/server/auth-user";
 
-// ─── Input Validation ─────────────────────────────────────────────────────────
-
 interface BootstrapInput {
   idToken: string;
   fullName?: string;
@@ -34,8 +32,6 @@ function validateBootstrapInput(body: unknown): BootstrapInput | null {
         : undefined,
   };
 }
-
-// ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
   try {
@@ -69,6 +65,14 @@ export async function POST(request: Request) {
     });
   } catch (error: unknown) {
     if (error instanceof Error) {
+      // ✅ Block role switching
+      if (error.message.startsWith("ROLE_CONFLICT:")) {
+        return NextResponse.json(
+          { error: error.message.replace("ROLE_CONFLICT: ", "") },
+          { status: 409 }
+        );
+      }
+
       if (error.message === "Authenticated user email is missing.") {
         return NextResponse.json(
           { error: "Account has no email address" },
