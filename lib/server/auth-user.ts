@@ -64,7 +64,6 @@ export const upsertUserFromIdToken = async ({
   ip,
   roleIntent,
 }: UpsertOptions): Promise<UpsertResult> => {
-  // ✅ false = don't check revocation (fixes 500 on fresh signups)
   const decoded = await adminAuth.verifyIdToken(idToken, false);
   const userRecord = await adminAuth.getUser(decoded.uid);
 
@@ -111,13 +110,16 @@ export const upsertUserFromIdToken = async ({
   let role = normalizeRole(current.role);
   let isProfileComplete = Boolean(current.isProfileComplete);
 
-  if (roleIntent === "provider" && role === "user") {
-    throw new Error("ROLE_CONFLICT: This email is already registered as a customer. Please use a different email to register as a provider.");
+  // ✅ Only block role conflict for EXISTING users
+  if (existing.exists) {
+    if (roleIntent === "provider" && role === "user") {
+      throw new Error("ROLE_CONFLICT: This email is already registered as a customer. Please use a different email to register as a provider.");
+    }
+    if (roleIntent === "user" && role === "provider") {
+      throw new Error("ROLE_CONFLICT: This email is already registered as a provider. Please use a different email to sign up as a customer.");
+    }
   }
 
-  if (roleIntent === "user" && role === "provider") {
-    throw new Error("ROLE_CONFLICT: This email is already registered as a provider. Please use a different email to sign up as a customer.");
-  }
   if (role === "provider" && !isProfileComplete) {
     const providerSnap = await adminDb.collection("providers").doc(decoded.uid).get();
     if (providerSnap.exists) {
@@ -133,8 +135,8 @@ export const upsertUserFromIdToken = async ({
   const status = isBlocked
     ? "blocked"
     : userRecord.emailVerified
-      ? "active"
-      : "pending_verification";
+    ? "active"
+    : "pending_verification";
 
   const sharedPayload = {
     uid: decoded.uid,
@@ -147,9 +149,9 @@ export const upsertUserFromIdToken = async ({
     status,
   };
 
+  // ✅ New user — create fresh document with correct role
   if (!existing.exists) {
-    const newRole: UserRole =
-      roleIntent === "provider" ? "provider" : "user";
+    const newRole: UserRole = roleIntent === "provider" ? "provider" : "user";
     await userRef.set({
       ...sharedPayload,
       role: newRole,
@@ -170,6 +172,7 @@ export const upsertUserFromIdToken = async ({
     };
   }
 
+  // ✅ Existing user — update without changing role
   await userRef.set(
     { ...sharedPayload, role, isProfileComplete },
     { merge: true }
