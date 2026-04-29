@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
@@ -53,6 +52,7 @@ export default function ChatPage() {
   const params = useParams<{ id: string }>();
   const bookingId = params?.id ?? "";
   const { user } = useAuth();
+  const router = useRouter();
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -139,16 +139,17 @@ export default function ChatPage() {
 
   return (
     <main className="flex h-dvh flex-col bg-muted/40">
-      <CustomerPageNav searchPlaceholder={`Search providers in Selected Area`} />
+      <CustomerPageNav searchPlaceholder="Search providers in Selected Area" />
       <header className="border-b border-border bg-card/95 px-4 py-3 sm:px-6">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <Link
-              href={`/bookings/${bookingId}`}
+            <button
+              type="button"
+              onClick={() => router.back()}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground hover:bg-muted"
             >
               <ArrowLeft size={18} />
-            </Link>
+            </button>
             <div className="grid h-11 w-11 place-items-center rounded-full bg-emerald-100 text-base font-semibold text-emerald-700">
               {providerName.charAt(0).toUpperCase()}
             </div>
